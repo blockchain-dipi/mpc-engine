@@ -1,5 +1,5 @@
 #include "coordinator/network/node_client/include/NodeConnectionInfo.hpp"
-#include "common/utils/SocketUtils.hpp"
+#include "common/utils/socket/SocketUtils.hpp"
 #include <sstream>
 
 namespace mpc_engine::coordinator::network

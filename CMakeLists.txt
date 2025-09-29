@@ -12,7 +12,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # === 공통 라이브러리 ===
 add_library(mpc_common STATIC
-    src/common/utils/SocketUtils.cpp
+    src/common/utils/socket/SocketUtils.cpp
     src/common/config/EnvConfig.cpp
     src/common/types/NodePlatformType.cpp
 )
@@ -93,8 +93,39 @@ target_link_libraries(coordinator
     Threads::Threads
 )
 
+# === 유닛 테스트 ==========================================================================================
+# ThreadSafeQueue 및 ThreadPool에 대한 유닛 테스트 추가
+add_executable(test_threadsafe_queue
+    tests/unit/threadsafe_queue_test.cpp
+)
+
+target_include_directories(test_threadsafe_queue PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+
+target_link_libraries(test_threadsafe_queue
+    Threads::Threads
+)
+
+# ThreadPool 유닛 테스트 (ThreadSafeQueue에 의존
+add_executable(test_threadpool
+    tests/unit/threadpool_test.cpp
+)
+
+target_include_directories(test_threadpool PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+
+target_link_libraries(test_threadpool
+    Threads::Threads
+)
+# === 유닛 테스트 ==========================================================================================
+
+
+# === 설치 설정 ===
 install(TARGETS coordinator node DESTINATION bin)
 
+# === 빌드 정보 출력 ===
 message(STATUS "=== MPC Engine Build Configuration ===")
 message(STATUS "Building: coordinator and node executables")
 message(STATUS "Focus: TCP communication between coordinator and nodes")

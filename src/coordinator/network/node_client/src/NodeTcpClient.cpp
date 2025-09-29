@@ -1,5 +1,5 @@
 #include "coordinator/network/node_client/include/NodeTcpClient.hpp"
-#include "common/utils/SocketUtils.hpp"
+#include "common/utils/socket/SocketUtils.hpp"
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>

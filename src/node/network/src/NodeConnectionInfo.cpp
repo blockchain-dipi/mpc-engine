@@ -1,6 +1,6 @@
 // src/node/network/src/NodeConnectionInfo.cpp
 #include "node/network/include/NodeConnectionInfo.hpp"
-#include "common/utils/SocketUtils.hpp"
+#include "common/utils/socket/SocketUtils.hpp"
 
 namespace mpc_engine::node::network
 {

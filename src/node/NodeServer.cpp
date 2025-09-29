@@ -2,7 +2,7 @@
 #include "node/NodeServer.hpp"
 #include "node/handlers/include/NodeProtocolRouter.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
-#include "common/utils/SocketUtils.hpp"
+#include "common/utils/socket/SocketUtils.hpp"
 #include <iostream>
 
 namespace mpc_engine::node

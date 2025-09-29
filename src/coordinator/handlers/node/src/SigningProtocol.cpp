@@ -1,6 +1,6 @@
 // src/coordinator/handlers/node/src/SigningProtocol.cpp
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
-#include "common/utils/SocketUtils.hpp"
+#include "common/utils/socket/SocketUtils.hpp"
 #include <iostream>
 #include <memory>
 

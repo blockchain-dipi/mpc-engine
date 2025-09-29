@@ -1,6 +1,6 @@
 // src/node/network/src/NodeTcpServer.cpp
 #include "node/network/include/NodeTcpServer.hpp"
-#include "common/utils/SocketUtils.hpp"
+#include "common/utils/socket/SocketUtils.hpp"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>

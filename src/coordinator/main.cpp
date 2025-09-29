@@ -1,7 +1,7 @@
 // src/coordinator/main.cpp
 #include "CoordinatorServer.hpp"
 #include "common/types/BasicTypes.hpp"
-#include "common/utils/SocketUtils.hpp"
+#include "common/utils/socket/SocketUtils.hpp"
 #include "common/config/EnvConfig.hpp"
 #include <iostream>
 #include <signal.h>

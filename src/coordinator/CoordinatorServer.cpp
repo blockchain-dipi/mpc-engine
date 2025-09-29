@@ -1,6 +1,6 @@
 // src/coordinator/CoordinatorServer.cpp
 #include "coordinator/CoordinatorServer.hpp"
-#include "common/utils/SocketUtils.hpp"
+#include "common/utils/socket/SocketUtils.hpp"
 #include <algorithm>
 #include <iostream>
 
