@@ -1,6 +1,5 @@
 // src/common/config/EnvConfig.hpp
 #pragma once
-
 #include <string>
 #include <unordered_map>
 #include <vector>
