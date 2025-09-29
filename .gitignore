@@ -1,0 +1,75 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.exe
+*.out
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Certificates and Keys (보안상 매우 중요!)
+certs/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Environment files with secrets
+.env.production
+.env.*.local
+*.secret
+
+# Core dumps
+core
+core.*
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS specific
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Dependencies (if using package managers)
+node_modules/
+vendor/
+
+# Test artifacts
+test_results/
+coverage/
+
+# Documentation builds
+docs/_build/
