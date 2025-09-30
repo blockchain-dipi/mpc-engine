@@ -1,3 +1,4 @@
+# CMakeLists.txt (루트)
 cmake_minimum_required(VERSION 3.16)
 project(mpc-engine)
 
@@ -93,34 +94,12 @@ target_link_libraries(coordinator
     Threads::Threads
 )
 
-# === 유닛 테스트 ==========================================================================================
-# ThreadSafeQueue 및 ThreadPool에 대한 유닛 테스트 추가
-add_executable(test_threadsafe_queue
-    tests/unit/threadsafe_queue_test.cpp
-)
-
-target_include_directories(test_threadsafe_queue PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src
-)
-
-target_link_libraries(test_threadsafe_queue
-    Threads::Threads
-)
-
-# ThreadPool 유닛 테스트 (ThreadSafeQueue에 의존
-add_executable(test_threadpool
-    tests/unit/threadpool_test.cpp
-)
-
-target_include_directories(test_threadpool PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src
-)
-
-target_link_libraries(test_threadpool
-    Threads::Threads
-)
-# === 유닛 테스트 ==========================================================================================
-
+# === 테스트 (별도 파일) ===
+option(BUILD_TESTS "Build unit tests" ON)
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # === 설치 설정 ===
 install(TARGETS coordinator node DESTINATION bin)
@@ -129,4 +108,5 @@ install(TARGETS coordinator node DESTINATION bin)
 message(STATUS "=== MPC Engine Build Configuration ===")
 message(STATUS "Building: coordinator and node executables")
 message(STATUS "Focus: TCP communication between coordinator and nodes")
+message(STATUS "Build tests: ${BUILD_TESTS}")
 message(STATUS "=======================================")

@@ -6,16 +6,28 @@
 #include <thread>
 #include <functional>
 #include <atomic>
-#include <future>
 #include <memory>
 
 namespace mpc_engine::utils
 {
+    template<typename ContextType>
     class ThreadPool 
     {
     private:
+        // 타입 안전한 Task
+        struct Task 
+        {
+            void (*func)(ContextType*);
+            ContextType* context;
+            
+            void operator()() const 
+            {
+                func(context);
+            }
+        };
+        
         std::vector<std::thread> workers;
-        ThreadSafeQueue<std::function<void()>> task_queue;
+        ThreadSafeQueue<Task> task_queue;
         std::atomic<bool> stop{false};
         std::atomic<size_t> active_tasks{0};
         size_t num_threads;
@@ -47,41 +59,14 @@ namespace mpc_engine::utils
         ThreadPool(ThreadPool&&) = delete;
         ThreadPool& operator=(ThreadPool&&) = delete;
 
-        // 작업 제출 (반환값 없음)
-        template<typename F>
-        void Submit(F&& task) 
+        // 작업 제출
+        void Submit(void (*func)(ContextType*), ContextType* context) 
         {
             if (stop) {
                 throw std::runtime_error("ThreadPool is stopped");
             }
 
-            task_queue.Push(std::forward<F>(task));
-        }
-
-        // 작업 제출 (반환값 있음)
-        template<typename F, typename... Args>
-        auto SubmitTask(F&& func, Args&&... args) 
-            -> std::future<typename std::invoke_result<F, Args...>::type>
-        {
-            using return_type = typename std::invoke_result<F, Args...>::type;
-
-            if (stop) {
-                throw std::runtime_error("ThreadPool is stopped");
-            }
-
-            // packaged_task로 래핑
-            auto task = std::make_shared<std::packaged_task<return_type()>>(
-                std::bind(std::forward<F>(func), std::forward<Args>(args)...)
-            );
-
-            std::future<return_type> result = task->get_future();
-
-            // 큐에 추가
-            task_queue.Push([task]() { 
-                (*task)(); 
-            });
-
-            return result;
+            task_queue.Push(Task{func, context});
         }
 
         // Graceful shutdown
@@ -90,10 +75,10 @@ namespace mpc_engine::utils
             if (stop.exchange(true)) {
                 return;  // 이미 종료 중
             }
-
+            
             // 큐 종료 (대기 중인 워커들 깨우기)
             task_queue.Shutdown();
-
+            
             // 모든 워커 종료 대기
             for (auto& worker : workers) {
                 if (worker.joinable()) {
@@ -130,19 +115,22 @@ namespace mpc_engine::utils
         void WorkerLoop(size_t worker_id) 
         {
             while (!stop) {
-                std::function<void()> task;
+                Task task;
 
                 // 큐에서 작업 가져오기 (blocking)
                 if (task_queue.Pop(task)) {
                     active_tasks++;
                     
                     try {
-                        task();
+                        // 직접 함수 포인터 호출
+                        task.func(task.context);
                     } catch (const std::exception& e) {
                         // 예외 로깅 (실제로는 Logger 사용)
-                        fprintf(stderr, "[ThreadPool Worker %zu] Exception: %s\n", worker_id, e.what());
+                        fprintf(stderr, "[ThreadPool Worker %zu] Exception: %s\n", 
+                                worker_id, e.what());
                     } catch (...) {
-                        fprintf(stderr, "[ThreadPool Worker %zu] Unknown exception\n", worker_id);
+                        fprintf(stderr, "[ThreadPool Worker %zu] Unknown exception\n", 
+                                worker_id);
                     }
                     
                     active_tasks--;
