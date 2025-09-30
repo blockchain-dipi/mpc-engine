@@ -265,7 +265,6 @@ namespace mpc_engine::node::network
             return;
         }
     
-        // Handler 존재 확인
         if (!message_handler) {
             std::cerr << "[ERROR] message_handler is null, cannot process messages" << std::endl;
             return;
@@ -274,7 +273,6 @@ namespace mpc_engine::node::network
         while (is_running.load() && HasActiveConnection()) {
             NetworkMessage request;
             
-            // 메시지 수신 (검증 포함)
             if (!ReceiveMessage(sock, request)) {
                 std::cerr << "[INFO] Connection lost or receive failed" << std::endl;
                 break;
@@ -282,7 +280,6 @@ namespace mpc_engine::node::network
         
             total_messages_received++;
             
-            // 연결 정보 업데이트
             {
                 std::lock_guard<std::mutex> lock(connection_mutex);
                 if (coordinator_connection) {
@@ -291,7 +288,6 @@ namespace mpc_engine::node::network
                 }
             }
         
-            // Handler pool에 제출
             auto* context = new HandlerContext(request, message_handler, send_queue.get());
             
             try {
@@ -301,26 +297,44 @@ namespace mpc_engine::node::network
                 // ThreadPool stopped
                 std::cerr << "[ERROR] Failed to submit task (pool stopped): " << e.what() << std::endl;
                 
-                // 에러 응답 생성 후 직접 전송 시도
                 NetworkMessage error_response = CreateErrorResponse(
                     request.header.message_type,
                     "Server shutting down"
                 );
                 
-                send_queue->TryPush(error_response, std::chrono::milliseconds(100));
+                // 🆕 QueueResult 사용
+                utils::QueueResult result = send_queue->TryPush(
+                    error_response, 
+                    std::chrono::milliseconds(100)
+                );
+                
+                if (result != utils::QueueResult::SUCCESS) {
+                    std::cerr << "[ERROR] Failed to push error response: " 
+                              << utils::ToString(result) << std::endl;
+                }
+                
                 delete context;
                 break;
                 
             } catch (const std::exception& e) {
                 std::cerr << "[ERROR] Failed to submit task: " << e.what() << std::endl;
                 
-                // 에러 응답
                 NetworkMessage error_response = CreateErrorResponse(
                     request.header.message_type,
                     "Server busy"
                 );
                 
-                send_queue->TryPush(error_response, std::chrono::milliseconds(100));
+                // 🆕 QueueResult 사용
+                utils::QueueResult result = send_queue->TryPush(
+                    error_response, 
+                    std::chrono::milliseconds(100)
+                );
+                
+                if (result != utils::QueueResult::SUCCESS) {
+                    std::cerr << "[ERROR] Failed to push error response: " 
+                              << utils::ToString(result) << std::endl;
+                }
+                
                 delete context;
                 handler_errors++;
             }
@@ -349,9 +363,17 @@ namespace mpc_engine::node::network
         while (is_running.load() && HasActiveConnection()) {
             NetworkMessage response;
             
-            // Block until response available
-            if (!send_queue->Pop(response)) {
-                // Queue shutdown
+            // 🆕 QueueResult 사용
+            utils::QueueResult result = send_queue->Pop(response);
+            
+            if (result == utils::QueueResult::SHUTDOWN) {
+                std::cout << "[INFO] Send queue shutdown" << std::endl;
+                break;
+            }
+            
+            if (result != utils::QueueResult::SUCCESS) {
+                std::cerr << "[ERROR] Pop from send queue failed: " 
+                          << utils::ToString(result) << std::endl;
                 break;
             }
 
@@ -383,24 +405,30 @@ namespace mpc_engine::node::network
         NetworkMessage response;
 
         try {
-            // 1. Request 메시지 재검증 (방어적)
             ValidationResult validation = context->request.Validate();
             if (validation != ValidationResult::OK) {
                 std::cerr << "[ERROR] Invalid request in handler: " << ToString(validation) << std::endl;
 
-                // 에러 응답 생성
                 response = CreateErrorResponse(
                     context->request.header.message_type,
                     std::string("Invalid request: ") + ToString(validation)
                 );
 
-                // Send queue에 추가
-                context->send_queue->TryPush(response, std::chrono::milliseconds(100));
+                // 🆕 QueueResult 사용
+                utils::QueueResult result = context->send_queue->TryPush(
+                    response, 
+                    std::chrono::milliseconds(100)
+                );
+                
+                if (result != utils::QueueResult::SUCCESS) {
+                    std::cerr << "[ERROR] Failed to push response: " 
+                              << utils::ToString(result) << std::endl;
+                }
+                
                 delete context;
                 return;
             }
 
-            // 2. Handler 호출
             if (!context->handler) {
                 std::cerr << "[ERROR] Handler is null" << std::endl;
 
@@ -409,18 +437,25 @@ namespace mpc_engine::node::network
                     "Handler not configured"
                 );
 
-                context->send_queue->TryPush(response, std::chrono::milliseconds(100));
+                utils::QueueResult result = context->send_queue->TryPush(
+                    response, 
+                    std::chrono::milliseconds(100)
+                );
+                
+                if (result != utils::QueueResult::SUCCESS) {
+                    std::cerr << "[ERROR] Failed to push response: " 
+                              << utils::ToString(result) << std::endl;
+                }
+                
                 delete context;
                 return;
             }
 
             response = context->handler(context->request);
 
-            // 3. Response 검증
             if (response.Validate() != ValidationResult::OK) {
                 std::cerr << "[ERROR] Handler generated invalid response" << std::endl;
 
-                // 새로운 에러 응답 생성
                 response = CreateErrorResponse(
                     context->request.header.message_type,
                     "Handler generated invalid response"
@@ -449,9 +484,18 @@ namespace mpc_engine::node::network
             );
         }
 
-        // 4. Send queue에 응답 추가
-        if (!context->send_queue->TryPush(response, std::chrono::milliseconds(1000))) {
-            std::cerr << "[ERROR] Failed to push response to send queue (timeout)" << std::endl;
+        // 🆕 QueueResult 사용 (더 긴 타임아웃)
+        utils::QueueResult result = context->send_queue->TryPush(
+            response, 
+            std::chrono::milliseconds(1000)
+        );
+        
+        if (result == utils::QueueResult::TIMEOUT) {
+            std::cerr << "[ERROR] Failed to push response to send queue: timeout after 1000ms" << std::endl;
+        } else if (result == utils::QueueResult::SHUTDOWN) {
+            std::cerr << "[INFO] Send queue is shutdown, discarding response" << std::endl;
+        } else if (result != utils::QueueResult::SUCCESS) {
+            std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
         }
 
         delete context;
@@ -495,12 +539,37 @@ namespace mpc_engine::node::network
 
     bool NodeTcpServer::SendMessage(socket_t sock, const NetworkMessage& outMessage)
     {
-        if (send(sock, &outMessage.header, sizeof(MessageHeader), MSG_NOSIGNAL) <= 0) {
+        // ✅ SendExact 사용
+        size_t bytes_sent = 0;
+        
+        // 1. 헤더 전송
+        utils::SocketIOResult result = utils::SendExact(
+            sock, 
+            &outMessage.header, 
+            sizeof(MessageHeader), 
+            &bytes_sent
+        );
+        
+        if (result != utils::SocketIOResult::SUCCESS) {
+            std::cerr << "[ERROR] Failed to send header: " 
+                      << utils::ToString(result) << std::endl;
             return false;
         }
 
+        // 2. Body 전송 (있으면)
         if (outMessage.header.body_length > 0) {
-            if (send(sock, outMessage.body.data(), outMessage.body.size(), MSG_NOSIGNAL) <= 0) {
+            result = utils::SendExact(
+                sock, 
+                outMessage.body.data(), 
+                outMessage.body.size(), 
+                &bytes_sent
+            );
+            
+            if (result != utils::SocketIOResult::SUCCESS) {
+                std::cerr << "[ERROR] Failed to send body: " 
+                          << utils::ToString(result) 
+                          << " (sent: " << bytes_sent << "/" << outMessage.body.size() << " bytes)" 
+                          << std::endl;
                 return false;
             }
         }
@@ -510,33 +579,45 @@ namespace mpc_engine::node::network
 
     bool NodeTcpServer::ReceiveMessage(socket_t sock, NetworkMessage& outMessage)
     {
-        // 1단계: 헤더 수신
-        ssize_t received = recv(sock, &outMessage.header, sizeof(MessageHeader), MSG_WAITALL);
-        if (received != sizeof(MessageHeader)) {
-            std::cerr << "[SECURITY] Incomplete header received: " << received << " bytes" << std::endl;
+        size_t bytes_received = 0;
+        
+        // ✅ 1단계: 헤더 수신 (ReceiveExact 사용)
+        utils::SocketIOResult result = utils::ReceiveExact(
+            sock, 
+            &outMessage.header, 
+            sizeof(MessageHeader), 
+            &bytes_received
+        );
+        
+        if (result != utils::SocketIOResult::SUCCESS) {
+            if (result == utils::SocketIOResult::CONNECTION_CLOSED) {
+                std::cout << "[INFO] Connection closed gracefully" << std::endl;
+            } else {
+                std::cerr << "[SECURITY] Header receive failed: " 
+                          << utils::ToString(result) 
+                          << " (received: " << bytes_received << "/" << sizeof(MessageHeader) << " bytes)" 
+                          << std::endl;
+            }
             return false;
         }
     
-        // 2단계: 헤더 기본 검증
-        ValidationResult result = outMessage.header.ValidateBasic();
-        if (result != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Header validation failed: " << ToString(result) << std::endl;
+        // ✅ 2단계: 헤더 기본 검증
+        ValidationResult validation = outMessage.header.ValidateBasic();
+        if (validation != ValidationResult::OK) {
+            std::cerr << "[SECURITY] Header validation failed: " << ToString(validation) << std::endl;
             std::cerr << "[SECURITY]   Magic: 0x" << std::hex << outMessage.header.magic << std::dec << std::endl;
             std::cerr << "[SECURITY]   Version: " << outMessage.header.version << std::endl;
             std::cerr << "[SECURITY]   Body length: " << outMessage.header.body_length << std::endl;
-            
-            // 악의적 연결 차단 고려
-            // CloseConnection();
             return false;
         }
     
-        // 3단계: 메시지 타입 검증
+        // ✅ 3단계: 메시지 타입 검증
         if (!outMessage.header.IsValidMessageType()) {
             std::cerr << "[SECURITY] Invalid message type: " << outMessage.header.message_type << std::endl;
             return false;
         }
     
-        // 4단계: Body 수신 (크기가 이미 검증됨)
+        // ✅ 4단계: Body 수신 (크기가 이미 검증됨)
         if (outMessage.header.body_length > 0) {
             try {
                 outMessage.body.resize(outMessage.header.body_length);
@@ -545,18 +626,27 @@ namespace mpc_engine::node::network
                 return false;
             }
         
-            received = recv(sock, outMessage.body.data(), outMessage.header.body_length, MSG_WAITALL);
-            if (received != static_cast<ssize_t>(outMessage.header.body_length)) {
-                std::cerr << "[SECURITY] Incomplete body received: " << received 
-                          << " / " << outMessage.header.body_length << " bytes" << std::endl;
+            bytes_received = 0;
+            result = utils::ReceiveExact(
+                sock, 
+                outMessage.body.data(), 
+                outMessage.header.body_length, 
+                &bytes_received
+            );
+            
+            if (result != utils::SocketIOResult::SUCCESS) {
+                std::cerr << "[SECURITY] Body receive failed: " 
+                          << utils::ToString(result)
+                          << " (received: " << bytes_received 
+                          << "/" << outMessage.header.body_length << " bytes)" << std::endl;
                 return false;
             }
         }
     
-        // 5단계: 전체 메시지 검증 (checksum 포함)
-        result = outMessage.Validate();
-        if (result != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Message validation failed: " << ToString(result) << std::endl;
+        // ✅ 5단계: 전체 메시지 검증 (checksum 포함)
+        validation = outMessage.Validate();
+        if (validation != ValidationResult::OK) {
+            std::cerr << "[SECURITY] Message validation failed: " << ToString(validation) << std::endl;
             return false;
         }
     

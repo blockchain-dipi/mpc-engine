@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
+#include <errno.h>
 
 namespace mpc_engine::utils 
 {
@@ -97,5 +98,198 @@ namespace mpc_engine::utils
         if (sock != INVALID_SOCKET_VALUE) {
             close(sock);
         }
+    }
+
+    SocketIOResult ReceiveExact(socket_t sock, void* buffer, size_t length, size_t* bytes_received)
+    {
+        if (bytes_received) {
+            *bytes_received = 0;
+        }
+
+        if (length == 0) {
+            return SocketIOResult::SUCCESS;
+        }
+
+        size_t total_received = 0;
+        char* data = static_cast<char*>(buffer);
+
+        while (total_received < length) {
+            ssize_t received = recv(sock, 
+                                   data + total_received, 
+                                   length - total_received, 
+                                   0);  // MSG_WAITALL 사용 안 함
+            
+            if (received > 0) {
+                // ✅ 정상 수신
+                total_received += received;
+                
+                if (bytes_received) {
+                    *bytes_received = total_received;
+                }
+                
+            } else if (received == 0) {
+                // ✅ 연결 종료 (FIN 패킷)
+                std::cerr << "[SOCKET] Connection closed by peer (received: " 
+                          << total_received << "/" << length << " bytes)" << std::endl;
+                
+                if (bytes_received) {
+                    *bytes_received = total_received;
+                }
+                
+                return SocketIOResult::CONNECTION_CLOSED;
+                
+            } else {
+                // ❌ 에러 발생
+                int err = errno;
+                
+                if (err == EINTR) {
+                    // ✅ 시그널 인터럽트 → 재시도
+                    std::cerr << "[SOCKET] Receive interrupted by signal, retrying..." << std::endl;
+                    continue;
+                }
+                
+                if (err == EAGAIN || err == EWOULDBLOCK) {
+                    // ⏱️ 타임아웃
+                    std::cerr << "[SOCKET] Receive timeout (received: " 
+                              << total_received << "/" << length << " bytes)" << std::endl;
+                    
+                    if (bytes_received) {
+                        *bytes_received = total_received;
+                    }
+                    
+                    return SocketIOResult::TIMEOUT;
+                }
+                
+                if (err == ECONNRESET || err == EPIPE || err == ENOTCONN) {
+                    // 🔌 연결 에러
+                    std::cerr << "[SOCKET] Connection error: " << strerror(err) << std::endl;
+                    
+                    if (bytes_received) {
+                        *bytes_received = total_received;
+                    }
+                    
+                    return SocketIOResult::CONNECTION_ERROR;
+                }
+                
+                // ❓ 알 수 없는 에러
+                std::cerr << "[SOCKET] Unknown receive error: " << strerror(err) << std::endl;
+                
+                if (bytes_received) {
+                    *bytes_received = total_received;
+                }
+                
+                return SocketIOResult::UNKNOWN_ERROR;
+            }
+        }
+
+        // ✅ 완전히 수신 완료
+        return SocketIOResult::SUCCESS;
+    }
+
+    SocketIOResult SendExact(socket_t sock, const void* data, size_t length, size_t* bytes_sent)
+    {
+        if (bytes_sent) {
+            *bytes_sent = 0;
+        }
+
+        if (length == 0) {
+            return SocketIOResult::SUCCESS;
+        }
+
+        size_t total_sent = 0;
+        const char* buffer = static_cast<const char*>(data);
+
+        while (total_sent < length) {
+            ssize_t sent = send(sock, 
+                              buffer + total_sent, 
+                              length - total_sent, 
+                              MSG_NOSIGNAL);  // SIGPIPE 방지
+            
+            if (sent > 0) {
+                // ✅ 정상 송신
+                total_sent += sent;
+                
+                if (bytes_sent) {
+                    *bytes_sent = total_sent;
+                }
+                
+            } else if (sent == 0) {
+                // ⚠️ send()가 0을 반환하는 경우는 거의 없지만, 방어 코드
+                std::cerr << "[SOCKET] Send returned 0 (unusual)" << std::endl;
+                continue;
+                
+            } else {
+                // ❌ 에러 발생
+                int err = errno;
+                
+                if (err == EINTR) {
+                    // ✅ 시그널 인터럽트 → 재시도
+                    std::cerr << "[SOCKET] Send interrupted by signal, retrying..." << std::endl;
+                    continue;
+                }
+                
+                if (err == EAGAIN || err == EWOULDBLOCK) {
+                    // ⏱️ 송신 버퍼 가득참 → 재시도
+                    std::cerr << "[SOCKET] Send buffer full, retrying..." << std::endl;
+                    continue;
+                }
+                
+                if (err == EPIPE || err == ECONNRESET || err == ENOTCONN) {
+                    // 🔌 연결 에러
+                    std::cerr << "[SOCKET] Connection error during send: " << strerror(err) << std::endl;
+                    
+                    if (bytes_sent) {
+                        *bytes_sent = total_sent;
+                    }
+                    
+                    return SocketIOResult::CONNECTION_ERROR;
+                }
+                
+                // ❓ 알 수 없는 에러
+                std::cerr << "[SOCKET] Unknown send error: " << strerror(err) << std::endl;
+                
+                if (bytes_sent) {
+                    *bytes_sent = total_sent;
+                }
+                
+                return SocketIOResult::UNKNOWN_ERROR;
+            }
+        }
+
+        // ✅ 완전히 송신 완료
+        return SocketIOResult::SUCCESS;
+    }
+
+    const char* ToString(SocketIOResult result)
+    {
+        switch (result) {
+            case SocketIOResult::SUCCESS:
+                return "SUCCESS";
+            case SocketIOResult::CONNECTION_CLOSED:
+                return "CONNECTION_CLOSED";
+            case SocketIOResult::INTERRUPTED:
+                return "INTERRUPTED";
+            case SocketIOResult::TIMEOUT:
+                return "TIMEOUT";
+            case SocketIOResult::CONNECTION_ERROR:
+                return "CONNECTION_ERROR";
+            case SocketIOResult::UNKNOWN_ERROR:
+                return "UNKNOWN_ERROR";
+            default:
+                return "UNKNOWN";
+        }
+    }
+
+    bool IsFatalError(SocketIOResult result)
+    {
+        return result == SocketIOResult::CONNECTION_CLOSED ||
+               result == SocketIOResult::CONNECTION_ERROR ||
+               result == SocketIOResult::UNKNOWN_ERROR;
+    }
+
+    bool IsRetryable(SocketIOResult result)
+    {
+        return result == SocketIOResult::INTERRUPTED ||
+               result == SocketIOResult::TIMEOUT;
     }
 }

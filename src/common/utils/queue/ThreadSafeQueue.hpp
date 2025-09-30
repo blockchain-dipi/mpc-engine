@@ -10,6 +10,27 @@
 
 namespace mpc_engine::utils
 {
+    // 🆕 Queue 연산 결과
+    enum class QueueResult 
+    {
+        SUCCESS = 0,      // 성공
+        SHUTDOWN = 1,     // Queue가 shutdown 상태
+        TIMEOUT = 2,      // 타임아웃 발생
+        FULL = 3          // Queue가 가득참 (TryPush에서만)
+    };
+
+    // 🆕 결과를 문자열로 변환
+    inline const char* ToString(QueueResult result) 
+    {
+        switch (result) {
+            case QueueResult::SUCCESS: return "SUCCESS";
+            case QueueResult::SHUTDOWN: return "SHUTDOWN";
+            case QueueResult::TIMEOUT: return "TIMEOUT";
+            case QueueResult::FULL: return "FULL";
+            default: return "UNKNOWN";
+        }
+    }
+
     template<typename T>
     class ThreadSafeQueue 
     {
@@ -38,87 +59,87 @@ namespace mpc_engine::utils
         ThreadSafeQueue(const ThreadSafeQueue&) = delete;
         ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
 
-        // Push: 큐에 아이템 추가 (큐가 가득 차면 대기)
-        bool Push(T item) 
+        // 🆕 Push: Queue에 아이템 추가 (Queue가 가득 차면 대기)
+        QueueResult Push(T item) 
         {
             std::unique_lock<std::mutex> lock(mutex);
 
-            // 큐가 가득 찼으면 공간이 생길 때까지 대기
+            // Queue가 가득 찼으면 공간이 생길 때까지 대기
             cv_not_full.wait(lock, [this]() {
                 return queue.size() < max_size || shutdown_flag;
             });
 
             if (shutdown_flag) {
-                return false;
+                return QueueResult::SHUTDOWN;  // ✅ item은 소멸자에서 자동 정리
             }
 
             queue.push(std::move(item));
             cv_not_empty.notify_one();
-            return true;
+            return QueueResult::SUCCESS;
         }
 
-        // TryPush: 타임아웃과 함께 Push 시도
-        bool TryPush(T item, std::chrono::milliseconds timeout) 
+        // 🆕 TryPush: 타임아웃과 함께 Push 시도
+        QueueResult TryPush(T item, std::chrono::milliseconds timeout) 
         {
             std::unique_lock<std::mutex> lock(mutex);
 
             if (!cv_not_full.wait_for(lock, timeout, [this]() {
                 return queue.size() < max_size || shutdown_flag;
             })) {
-                return false;  // 타임아웃
+                return QueueResult::TIMEOUT;
             }
 
             if (shutdown_flag) {
-                return false;
+                return QueueResult::SHUTDOWN;
             }
 
             queue.push(std::move(item));
             cv_not_empty.notify_one();
-            return true;
+            return QueueResult::SUCCESS;
         }
 
-        // Pop: 큐에서 아이템 꺼내기 (큐가 비어있으면 대기)
-        bool Pop(T& item) 
+        // 🆕 Pop: Queue에서 아이템 꺼내기 (Queue가 비어있으면 대기)
+        QueueResult Pop(T& item) 
         {
             std::unique_lock<std::mutex> lock(mutex);
 
-            // 큐에 아이템이 있을 때까지 대기
+            // Queue에 아이템이 있을 때까지 대기
             cv_not_empty.wait(lock, [this]() {
                 return !queue.empty() || shutdown_flag;
             });
 
             if (shutdown_flag && queue.empty()) {
-                return false;
+                return QueueResult::SHUTDOWN;
             }
 
             item = std::move(queue.front());
             queue.pop();
             cv_not_full.notify_one();
-            return true;
+            return QueueResult::SUCCESS;
         }
 
-        // TryPop: 타임아웃과 함께 Pop 시도
-        bool TryPop(T& item, std::chrono::milliseconds timeout) 
+        // 🆕 TryPop: 타임아웃과 함께 Pop 시도
+        QueueResult TryPop(T& item, std::chrono::milliseconds timeout) 
         {
             std::unique_lock<std::mutex> lock(mutex);
 
             if (!cv_not_empty.wait_for(lock, timeout, [this]() {
                 return !queue.empty() || shutdown_flag;
             })) {
-                return false;  // 타임아웃
+                return QueueResult::TIMEOUT;
             }
 
             if (shutdown_flag && queue.empty()) {
-                return false;
+                return QueueResult::SHUTDOWN;
             }
 
             item = std::move(queue.front());
             queue.pop();
             cv_not_full.notify_one();
-            return true;
+            return QueueResult::SUCCESS;
         }
 
-        // Shutdown: 큐 종료 (대기 중인 모든 스레드 깨우기)
+        // Shutdown: Queue 종료 (대기 중인 모든 스레드 깨우기)
         void Shutdown() 
         {
             {
@@ -129,21 +150,21 @@ namespace mpc_engine::utils
             cv_not_full.notify_all();
         }
 
-        // Size: 현재 큐 크기
+        // Size: 현재 Queue 크기
         size_t Size() const 
         {
             std::lock_guard<std::mutex> lock(mutex);
             return queue.size();
         }
 
-        // Empty: 큐가 비어있는지 확인
+        // Empty: Queue가 비어있는지 확인
         bool Empty() const 
         {
             std::lock_guard<std::mutex> lock(mutex);
             return queue.empty();
         }
 
-        // IsFull: 큐가 가득 찼는지 확인
+        // IsFull: Queue가 가득 찼는지 확인
         bool IsFull() const 
         {
             std::lock_guard<std::mutex> lock(mutex);
@@ -156,7 +177,7 @@ namespace mpc_engine::utils
             return shutdown_flag.load();
         }
 
-        // Clear: 큐 비우기
+        // Clear: Queue 비우기
         void Clear() 
         {
             std::lock_guard<std::mutex> lock(mutex);
@@ -170,6 +191,7 @@ namespace mpc_engine::utils
         {
             return max_size;
         }
+
     };
 
 } // namespace mpc_engine::utils

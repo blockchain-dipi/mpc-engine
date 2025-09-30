@@ -66,7 +66,14 @@ namespace mpc_engine::utils
                 throw std::runtime_error("ThreadPool is stopped");
             }
 
-            task_queue.Push(Task{func, context});
+            // 🆕 QueueResult 확인
+            QueueResult result = task_queue.Push(Task{func, context});
+            
+            if (result == QueueResult::SHUTDOWN) {
+                throw std::runtime_error("ThreadPool queue is shutdown");
+            } else if (result != QueueResult::SUCCESS) {
+                throw std::runtime_error("Failed to push task: " + std::string(ToString(result)));
+            }
         }
 
         // Graceful shutdown
@@ -76,7 +83,7 @@ namespace mpc_engine::utils
                 return;  // 이미 종료 중
             }
             
-            // 큐 종료 (대기 중인 워커들 깨우기)
+            // Queue 종료 (대기 중인 워커들 깨우기)
             task_queue.Shutdown();
             
             // 모든 워커 종료 대기
@@ -117,27 +124,36 @@ namespace mpc_engine::utils
             while (!stop) {
                 Task task;
 
-                // 큐에서 작업 가져오기 (blocking)
-                if (task_queue.Pop(task)) {
-                    active_tasks++;
-                    
-                    try {
-                        // 직접 함수 포인터 호출
-                        task.func(task.context);
-                    } catch (const std::exception& e) {
-                        // 예외 로깅 (실제로는 Logger 사용)
-                        fprintf(stderr, "[ThreadPool Worker %zu] Exception: %s\n", 
-                                worker_id, e.what());
-                    } catch (...) {
-                        fprintf(stderr, "[ThreadPool Worker %zu] Unknown exception\n", 
-                                worker_id);
-                    }
-                    
-                    active_tasks--;
-                } else {
+                // 🆕 QueueResult 사용
+                QueueResult result = task_queue.Pop(task);
+                
+                if (result == QueueResult::SHUTDOWN) {
                     // Shutdown 시그널
                     break;
                 }
+                
+                if (result != QueueResult::SUCCESS) {
+                    // 예상치 못한 에러
+                    fprintf(stderr, "[ThreadPool Worker %zu] Unexpected pop result: %s\n", 
+                            worker_id, ToString(result));
+                    break;
+                }
+
+                active_tasks++;
+                
+                try {
+                    // 직접 함수 포인터 호출
+                    task.func(task.context);
+                } catch (const std::exception& e) {
+                    // 예외 로깅
+                    fprintf(stderr, "[ThreadPool Worker %zu] Exception: %s\n", 
+                            worker_id, e.what());
+                } catch (...) {
+                    fprintf(stderr, "[ThreadPool Worker %zu] Unknown exception\n", 
+                            worker_id);
+                }
+                
+                active_tasks--;
             }
         }
     };

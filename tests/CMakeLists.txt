@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.16)
 # 테스트 공통 설정
 set(TEST_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
+# unit (통합 테스트) ==========================================================================================
 # === ThreadSafeQueue 테스트 ===
 add_executable(test_threadsafe_queue
     unit/threadsafe_queue_test.cpp
@@ -34,6 +35,24 @@ target_link_libraries(test_threadpool
 
 add_test(NAME ThreadPool COMMAND test_threadpool)
 
+# === SocketIO 테스트 ===
+add_executable(test_socket_io
+    unit/socket_io_test.cpp
+)
+
+target_include_directories(test_socket_io PRIVATE
+    ${TEST_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_socket_io
+    Threads::Threads
+    mpc_common                # SocketUtils 등
+)
+
+add_test(NAME SocketIO COMMAND test_socket_io)
+
+
+# integration (통합 테스트) ==========================================================================================
 # === Node TCP Server 테스트 (통합 테스트) ===
 add_executable(test_node_tcp_server
     integration/node_tcp_server_test.cpp
