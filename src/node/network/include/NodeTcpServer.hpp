@@ -14,7 +14,8 @@
 
 namespace mpc_engine::node::network
 {
-    using MessageHandler = std::function<protocol::coordinator_node::NetworkMessage(const protocol::coordinator_node::NetworkMessage&)>;
+    using namespace protocol::coordinator_node;
+    using MessageHandler = std::function<NetworkMessage(const NetworkMessage&)>;
     using ConnectionHandler = std::function<void(const NodeConnectionInfo&)>;
 
     struct SecurityConfig {
@@ -28,13 +29,13 @@ namespace mpc_engine::node::network
 
     // Handler Worker Context
     struct HandlerContext {
-        protocol::coordinator_node::NetworkMessage request;
+        NetworkMessage request;
         MessageHandler handler;
-        utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>* send_queue;
-        
-        HandlerContext(const protocol::coordinator_node::NetworkMessage& req,
+        utils::ThreadSafeQueue<NetworkMessage>* send_queue;
+
+        HandlerContext(const NetworkMessage& req,
             MessageHandler h,
-            utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>* sq)
+            utils::ThreadSafeQueue<NetworkMessage>* sq)
             : request(req), handler(h), send_queue(sq) {}
     };
 
@@ -62,7 +63,7 @@ namespace mpc_engine::node::network
         size_t num_handler_threads;
         
         // Send queue
-        std::unique_ptr<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>> send_queue;
+        std::unique_ptr<utils::ThreadSafeQueue<NetworkMessage>> send_queue;
         
         SecurityConfig security_config;
         
@@ -125,7 +126,8 @@ namespace mpc_engine::node::network
         void ForceCloseExistingConnection();
         void SetSocketOptions(socket_t sock);
         
-        bool SendMessage(socket_t sock, const protocol::coordinator_node::NetworkMessage& outMessage);
-        bool ReceiveMessage(socket_t sock, protocol::coordinator_node::NetworkMessage& outMessage);
+        bool SendMessage(socket_t sock, const NetworkMessage& outMessage);
+        bool ReceiveMessage(socket_t sock, NetworkMessage& outMessage);
+        static NetworkMessage CreateErrorResponse(uint16_t original_message_type, const std::string& error_message);
     };
 }

@@ -34,9 +34,15 @@ namespace mpc_engine::utils
         std::array<char, 128> buffer;
         std::string result;
         
-        std::unique_ptr<FILE, decltype(&pclose)> pipe(
-            popen((command + " 2>&1").c_str(), "r"), 
-            pclose
+        // 명시적 deleter 타입 사용
+        struct PipeCloser {
+            void operator()(FILE* fp) const {
+                if (fp) pclose(fp);
+            }
+        };
+        
+        std::unique_ptr<FILE, PipeCloser> pipe(
+            popen((command + " 2>&1").c_str(), "r")
         );
         
         if (!pipe) {

@@ -57,7 +57,7 @@ namespace mpc_engine::node::network
         handler_pool = std::make_unique<utils::ThreadPool<HandlerContext>>(num_handler_threads);
         
         // Initialize send queue (size: num_handlers * 5)
-        send_queue = std::make_unique<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>>(
+        send_queue = std::make_unique<utils::ThreadSafeQueue<NetworkMessage>>(
             num_handler_threads * 5
         );
 
@@ -248,6 +248,8 @@ namespace mpc_engine::node::network
 
     void NodeTcpServer::ReceiveLoop()
     {
+        using namespace protocol::coordinator_node;
+    
         std::cout << "Receive thread started" << std::endl;
         
         socket_t sock = INVALID_SOCKET_VALUE;
@@ -259,20 +261,28 @@ namespace mpc_engine::node::network
         }
         
         if (sock == INVALID_SOCKET_VALUE) {
-            std::cerr << "Invalid socket in ReceiveLoop" << std::endl;
+            std::cerr << "[ERROR] Invalid socket in ReceiveLoop" << std::endl;
             return;
         }
-
+    
+        // Handler 존재 확인
+        if (!message_handler) {
+            std::cerr << "[ERROR] message_handler is null, cannot process messages" << std::endl;
+            return;
+        }
+    
         while (is_running.load() && HasActiveConnection()) {
-            protocol::coordinator_node::NetworkMessage request;
+            NetworkMessage request;
             
+            // 메시지 수신 (검증 포함)
             if (!ReceiveMessage(sock, request)) {
-                std::cout << "Connection lost or receive failed" << std::endl;
+                std::cerr << "[INFO] Connection lost or receive failed" << std::endl;
                 break;
             }
-
+        
             total_messages_received++;
             
+            // 연결 정보 업데이트
             {
                 std::lock_guard<std::mutex> lock(connection_mutex);
                 if (coordinator_connection) {
@@ -280,18 +290,39 @@ namespace mpc_engine::node::network
                     coordinator_connection->total_requests_handled++;
                 }
             }
-
-            // Submit to handler pool
-            if (message_handler) {
-                auto* context = new HandlerContext(request, message_handler, send_queue.get());
+        
+            // Handler pool에 제출
+            auto* context = new HandlerContext(request, message_handler, send_queue.get());
+            
+            try {
+                handler_pool->Submit(ProcessMessage, context);
                 
-                try {
-                    handler_pool->Submit(ProcessMessage, context);
-                } catch (const std::exception& e) {
-                    std::cerr << "Failed to submit task: " << e.what() << std::endl;
-                    delete context;
-                    handler_errors++;
-                }
+            } catch (const std::runtime_error& e) {
+                // ThreadPool stopped
+                std::cerr << "[ERROR] Failed to submit task (pool stopped): " << e.what() << std::endl;
+                
+                // 에러 응답 생성 후 직접 전송 시도
+                NetworkMessage error_response = CreateErrorResponse(
+                    request.header.message_type,
+                    "Server shutting down"
+                );
+                
+                send_queue->TryPush(error_response, std::chrono::milliseconds(100));
+                delete context;
+                break;
+                
+            } catch (const std::exception& e) {
+                std::cerr << "[ERROR] Failed to submit task: " << e.what() << std::endl;
+                
+                // 에러 응답
+                NetworkMessage error_response = CreateErrorResponse(
+                    request.header.message_type,
+                    "Server busy"
+                );
+                
+                send_queue->TryPush(error_response, std::chrono::milliseconds(100));
+                delete context;
+                handler_errors++;
             }
         }
         
@@ -316,7 +347,7 @@ namespace mpc_engine::node::network
         }
 
         while (is_running.load() && HasActiveConnection()) {
-            protocol::coordinator_node::NetworkMessage response;
+            NetworkMessage response;
             
             // Block until response available
             if (!send_queue->Pop(response)) {
@@ -342,18 +373,85 @@ namespace mpc_engine::node::network
 
     void NodeTcpServer::ProcessMessage(HandlerContext* context)
     {
-        if (!context) return;
+        using namespace protocol::coordinator_node;
+
+        if (!context) {
+            std::cerr << "[ERROR] ProcessMessage received null context" << std::endl;
+            return;
+        }
+
+        NetworkMessage response;
 
         try {
-            // Process message
-            protocol::coordinator_node::NetworkMessage response = context->handler(context->request);
-            
-            // Add to send queue
-            if (!context->send_queue->Push(response)) {
-                std::cerr << "Failed to push response to send queue" << std::endl;
+            // 1. Request 메시지 재검증 (방어적)
+            ValidationResult validation = context->request.Validate();
+            if (validation != ValidationResult::OK) {
+                std::cerr << "[ERROR] Invalid request in handler: " << ToString(validation) << std::endl;
+
+                // 에러 응답 생성
+                response = CreateErrorResponse(
+                    context->request.header.message_type,
+                    std::string("Invalid request: ") + ToString(validation)
+                );
+
+                // Send queue에 추가
+                context->send_queue->TryPush(response, std::chrono::milliseconds(100));
+                delete context;
+                return;
             }
+
+            // 2. Handler 호출
+            if (!context->handler) {
+                std::cerr << "[ERROR] Handler is null" << std::endl;
+
+                response = CreateErrorResponse(
+                    context->request.header.message_type,
+                    "Handler not configured"
+                );
+
+                context->send_queue->TryPush(response, std::chrono::milliseconds(100));
+                delete context;
+                return;
+            }
+
+            response = context->handler(context->request);
+
+            // 3. Response 검증
+            if (response.Validate() != ValidationResult::OK) {
+                std::cerr << "[ERROR] Handler generated invalid response" << std::endl;
+
+                // 새로운 에러 응답 생성
+                response = CreateErrorResponse(
+                    context->request.header.message_type,
+                    "Handler generated invalid response"
+                );
+            }
+
+        } catch (const std::bad_alloc& e) {
+            std::cerr << "[ERROR] Memory allocation error in handler: " << e.what() << std::endl;
+            response = CreateErrorResponse(
+                context->request.header.message_type,
+                "Server memory error"
+            );
+
         } catch (const std::exception& e) {
-            std::cerr << "Handler exception: " << e.what() << std::endl;
+            std::cerr << "[ERROR] Handler exception: " << e.what() << std::endl;
+            response = CreateErrorResponse(
+                context->request.header.message_type,
+                std::string("Handler error: ") + e.what()
+            );
+
+        } catch (...) {
+            std::cerr << "[ERROR] Unknown handler exception" << std::endl;
+            response = CreateErrorResponse(
+                context->request.header.message_type,
+                "Unknown server error"
+            );
+        }
+
+        // 4. Send queue에 응답 추가
+        if (!context->send_queue->TryPush(response, std::chrono::milliseconds(1000))) {
+            std::cerr << "[ERROR] Failed to push response to send queue (timeout)" << std::endl;
         }
 
         delete context;
@@ -395,9 +493,9 @@ namespace mpc_engine::node::network
         utils::SetSocketBufferSize(sock, 64 * 1024, 64 * 1024);
     }
 
-    bool NodeTcpServer::SendMessage(socket_t sock, const protocol::coordinator_node::NetworkMessage& outMessage)
+    bool NodeTcpServer::SendMessage(socket_t sock, const NetworkMessage& outMessage)
     {
-        if (send(sock, &outMessage.header, sizeof(protocol::coordinator_node::MessageHeader), MSG_NOSIGNAL) <= 0) {
+        if (send(sock, &outMessage.header, sizeof(MessageHeader), MSG_NOSIGNAL) <= 0) {
             return false;
         }
 
@@ -410,31 +508,59 @@ namespace mpc_engine::node::network
         return true;
     }
 
-    bool NodeTcpServer::ReceiveMessage(socket_t sock, protocol::coordinator_node::NetworkMessage& outMessage)
+    bool NodeTcpServer::ReceiveMessage(socket_t sock, NetworkMessage& outMessage)
     {
-        ssize_t received = recv(sock, &outMessage.header, sizeof(protocol::coordinator_node::MessageHeader), MSG_WAITALL);
-        if (received != sizeof(protocol::coordinator_node::MessageHeader)) {
+        // 1단계: 헤더 수신
+        ssize_t received = recv(sock, &outMessage.header, sizeof(MessageHeader), MSG_WAITALL);
+        if (received != sizeof(MessageHeader)) {
+            std::cerr << "[SECURITY] Incomplete header received: " << received << " bytes" << std::endl;
             return false;
         }
-
-        if (!outMessage.header.IsValid()) {
-            std::cerr << "Invalid message header" << std::endl;
+    
+        // 2단계: 헤더 기본 검증
+        ValidationResult result = outMessage.header.ValidateBasic();
+        if (result != ValidationResult::OK) {
+            std::cerr << "[SECURITY] Header validation failed: " << ToString(result) << std::endl;
+            std::cerr << "[SECURITY]   Magic: 0x" << std::hex << outMessage.header.magic << std::dec << std::endl;
+            std::cerr << "[SECURITY]   Version: " << outMessage.header.version << std::endl;
+            std::cerr << "[SECURITY]   Body length: " << outMessage.header.body_length << std::endl;
+            
+            // 악의적 연결 차단 고려
+            // CloseConnection();
             return false;
         }
-
+    
+        // 3단계: 메시지 타입 검증
+        if (!outMessage.header.IsValidMessageType()) {
+            std::cerr << "[SECURITY] Invalid message type: " << outMessage.header.message_type << std::endl;
+            return false;
+        }
+    
+        // 4단계: Body 수신 (크기가 이미 검증됨)
         if (outMessage.header.body_length > 0) {
-            if (outMessage.header.body_length > MAX_MESSAGE_SIZE) {
-                std::cerr << "Message too large: " << outMessage.header.body_length << std::endl;
+            try {
+                outMessage.body.resize(outMessage.header.body_length);
+            } catch (const std::bad_alloc& e) {
+                std::cerr << "[SECURITY] Memory allocation failed for body: " << e.what() << std::endl;
                 return false;
             }
-
-            outMessage.body.resize(outMessage.header.body_length);
+        
             received = recv(sock, outMessage.body.data(), outMessage.header.body_length, MSG_WAITALL);
             if (received != static_cast<ssize_t>(outMessage.header.body_length)) {
+                std::cerr << "[SECURITY] Incomplete body received: " << received 
+                          << " / " << outMessage.header.body_length << " bytes" << std::endl;
                 return false;
             }
         }
-
+    
+        // 5단계: 전체 메시지 검증 (checksum 포함)
+        result = outMessage.Validate();
+        if (result != ValidationResult::OK) {
+            std::cerr << "[SECURITY] Message validation failed: " << ToString(result) << std::endl;
+            return false;
+        }
+    
+        // ✅ 모든 검증 통과
         return true;
     }
 
@@ -480,5 +606,13 @@ namespace mpc_engine::node::network
     bool NodeTcpServer::IsRunning() const
     {
         return is_running.load();
+    }
+    
+    // 에러 응답 생성 헬퍼
+    NetworkMessage NodeTcpServer::CreateErrorResponse(uint16_t original_message_type, const std::string& error_message)
+    {
+        std::string payload = "success=false|error=" + error_message;
+        NetworkMessage error_msg(original_message_type, payload);
+        return error_msg;
     }
 }
