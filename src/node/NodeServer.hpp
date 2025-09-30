@@ -50,6 +50,9 @@ namespace mpc_engine::node
         bool IsRunning() const;
 
         void SetNodeConfig(const NodeConfig& config);
+        // TCP 서버 접근 (방화벽 설정용)
+        network::NodeTcpServer* GetTcpServer() { return tcp_server.get(); }
+        
         std::string GetNodeId() const;
         NodePlatformType GetPlatformType() const;
         NodeStats GetStats() const;

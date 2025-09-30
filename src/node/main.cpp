@@ -140,6 +140,14 @@ int main(int argc, char* argv[]) {
 
         node_server.SetNodeConfig(config);
 
+        // TCP 서버 방화벽 설정
+        bool enable_kernel_firewall = env_config.GetBool("ENABLE_KERNEL_FIREWALL", true);
+        std::string trusted_ip = env_config.GetString("TRUSTED_COORDINATOR_IP", "127.0.0.1");
+        network::NodeTcpServer* tcp_server = node_server.GetTcpServer();
+        tcp_server->SetTrustedCoordinator(trusted_ip);
+        tcp_server->EnableKernelFirewall(enable_kernel_firewall);
+
+        // 서버 초기화 및 시작
         if (!node_server.Initialize()) {
             std::cerr << "Failed to initialize node server" << std::endl;
             return 1;

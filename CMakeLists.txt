@@ -14,6 +14,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 # === 공통 라이브러리 ===
 add_library(mpc_common STATIC
     src/common/utils/socket/SocketUtils.cpp
+    src/common/utils/firewall/KernelFirewall.cpp
     src/common/config/EnvConfig.cpp
     src/common/types/NodePlatformType.cpp
 )

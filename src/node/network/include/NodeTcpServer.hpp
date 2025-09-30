@@ -1,6 +1,8 @@
 // src/node/network/include/NodeTcpServer.hpp
 #pragma once
 #include "common/types/BasicTypes.hpp"
+#include "common/utils/threading/ThreadPool.hpp"
+#include "common/utils/queue/ThreadSafeQueue.hpp"
 #include "protocols/coordinator_node/include/MessageTypes.hpp"
 #include "NodeConnectionInfo.hpp"
 #include <functional>
@@ -20,8 +22,20 @@ namespace mpc_engine::node::network
         bool strict_mode = true;
         
         bool IsAllowed(const std::string& ip) const {
-            return strict_mode && (ip == trusted_coordinator_ip);
+            return !strict_mode || (ip == trusted_coordinator_ip);
         }
+    };
+
+    // Handler Worker Context
+    struct HandlerContext {
+        protocol::coordinator_node::NetworkMessage request;
+        MessageHandler handler;
+        utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>* send_queue;
+        
+        HandlerContext(const protocol::coordinator_node::NetworkMessage& req,
+            MessageHandler h,
+            utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>* sq)
+            : request(req), handler(h), send_queue(sq) {}
     };
 
     class NodeTcpServer 
@@ -34,11 +48,21 @@ namespace mpc_engine::node::network
         std::atomic<bool> is_running{false};
         std::atomic<bool> is_initialized{false};
         
-        // Single connection
+        // Single connection info
         std::unique_ptr<NodeConnectionInfo> coordinator_connection;
         mutable std::mutex connection_mutex;
         
+        // Thread components
         std::thread connection_thread;
+        std::thread receive_thread;
+        std::thread send_thread;
+        
+        // ThreadPool for message handlers
+        std::unique_ptr<utils::ThreadPool<HandlerContext>> handler_pool;
+        size_t num_handler_threads;
+        
+        // Send queue
+        std::unique_ptr<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>> send_queue;
         
         SecurityConfig security_config;
         
@@ -46,8 +70,17 @@ namespace mpc_engine::node::network
         ConnectionHandler connected_handler;
         ConnectionHandler disconnected_handler;
 
+        // Statistics
+        std::atomic<uint64_t> total_messages_received{0};
+        std::atomic<uint64_t> total_messages_sent{0};
+        std::atomic<uint64_t> total_messages_processed{0};
+        std::atomic<uint64_t> handler_errors{0};
+
+        // Kernel firewall
+        bool enable_kernel_firewall = false;
+
     public:
-        NodeTcpServer(const std::string& address, uint16_t port);
+        NodeTcpServer(const std::string& address, uint16_t port, size_t handler_threads = 4);
         ~NodeTcpServer();
 
         bool Initialize();
@@ -61,16 +94,38 @@ namespace mpc_engine::node::network
 
         void SetTrustedCoordinator(const std::string& ip);
         bool HasActiveConnection() const;
+        
+        // 커널 방화벽 설정 (옵션)
+        void EnableKernelFirewall(bool enable = true) { enable_kernel_firewall = enable; }
+        bool IsKernelFirewallEnabled() const { return enable_kernel_firewall; }
+        
+        // Statistics
+        struct ServerStats {
+            uint64_t messages_received;
+            uint64_t messages_sent;
+            uint64_t messages_processed;
+            uint64_t handler_errors;
+            size_t pending_send_queue;
+            size_t active_handlers;
+        };
+        ServerStats GetStats() const;
 
     private:
+        // Thread functions
         void ConnectionLoop();
+        void ReceiveLoop();
+        void SendLoop();
+        
+        // Handler worker function (static for ThreadPool)
+        static void ProcessMessage(HandlerContext* context);
+        
         void HandleCoordinatorConnection(socket_t client_socket, const std::string& client_ip, uint16_t client_port);
         
         bool IsAuthorized(const std::string& client_ip);
         void ForceCloseExistingConnection();
         void SetSocketOptions(socket_t sock);
         
-        bool SendMessage(socket_t sock, const protocol::coordinator_node::NetworkMessage& message);
-        bool ReceiveMessage(socket_t sock, protocol::coordinator_node::NetworkMessage& message);
+        bool SendMessage(socket_t sock, const protocol::coordinator_node::NetworkMessage& outMessage);
+        bool ReceiveMessage(socket_t sock, protocol::coordinator_node::NetworkMessage& outMessage);
     };
 }
