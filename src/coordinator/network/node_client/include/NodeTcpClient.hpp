@@ -2,19 +2,29 @@
 #pragma once
 #include "NodeConnectionInfo.hpp"
 #include "protocols/coordinator_node/include/MessageTypes.hpp"
+#include "common/utils/queue/ThreadSafeQueue.hpp"
 #include <memory>
 #include <mutex>
 #include <functional>
 #include <atomic>
+#include <future>
+#include <unordered_map>
+#include <thread>
 
 namespace mpc_engine::coordinator::network
 {
     using namespace protocol::coordinator_node;
     using namespace mpc_engine::node;
     
-    using NodeConnectedCallback = std::function<void(const NodeConnectionInfo&)>;
-    using NodeDisconnectedCallback = std::function<void(const NodeConnectionInfo&)>;
-    using NodeErrorCallback = std::function<void(const NodeConnectionInfo&, NetworkError, const std::string&)>;
+    using NodeConnectedCallback = std::function<void(const std::string& node_id)>;
+    using NodeDisconnectedCallback = std::function<void(const std::string& node_id)>;
+    using NodeErrorCallback = std::function<void(const std::string& node_id, NetworkError, const std::string&)>;
+
+    // 비동기 요청 결과
+    struct AsyncRequestResult {
+        uint64_t request_id;
+        std::future<protocol::coordinator_node::NetworkMessage> future;
+    };
 
     class NodeTcpClient 
     {
@@ -22,11 +32,27 @@ namespace mpc_engine::coordinator::network
         NodeConnectionInfo connection_info;
         mutable std::mutex client_mutex;
         
-        std::atomic<uint64_t> last_used_time{0};  // 💡 추가
+        std::atomic<uint64_t> last_used_time{0};
+        std::atomic<bool> is_connected{false};
         
         NodeConnectedCallback connected_callback;
         NodeDisconnectedCallback disconnected_callback;
         NodeErrorCallback error_callback;
+
+        // Send Queue: 여러 Handler가 요청을 큐잉
+        std::unique_ptr<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>> send_queue;
+        
+        // Pending Requests: request_id → promise 매핑
+        std::unordered_map<uint64_t, std::promise<protocol::coordinator_node::NetworkMessage>> pending_requests;
+        std::mutex pending_mutex;
+        
+        // Request ID 생성기
+        std::atomic<uint64_t> next_request_id{1};
+        
+        // Worker Threads
+        std::thread send_thread;
+        std::thread receive_thread;
+        std::atomic<bool> threads_running{false};
 
     public:
         NodeTcpClient(const std::string& node_id, 
@@ -44,6 +70,7 @@ namespace mpc_engine::coordinator::network
         bool SendMessage(const NetworkMessage& message);
         bool ReceiveMessage(NetworkMessage& message);
 
+        AsyncRequestResult SendRequestAsync(const protocol::coordinator_node::BaseRequest* request);
         std::unique_ptr<BaseResponse> SendRequest(const BaseRequest* request);
 
         void SetConnectedCallback(NodeConnectedCallback callback);
@@ -66,6 +93,9 @@ namespace mpc_engine::coordinator::network
         bool InitializeSocket();
         bool ConnectSocket();
         void CleanupSocket();
+
+        void SendLoop();
+        void ReceiveLoop();
 
         bool SendRaw(const void* data, size_t length);
         bool ReceiveRaw(void* buffer, size_t length);

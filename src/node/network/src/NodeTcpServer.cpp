@@ -433,9 +433,10 @@ namespace mpc_engine::node::network
         }
 
         NetworkMessage response;
+        uint64_t request_id = ctx->request.header.request_id;  // ✅ 미리 저장
 
         try {
-            // ✅ ctx-> 사용 (context 대신)
+            // 검증
             ValidationResult validation = ctx->request.Validate();
             if (validation != ValidationResult::OK) {
                 std::cerr << "[ERROR] Invalid request in handler: " << ToString(validation) << std::endl;
@@ -444,6 +445,7 @@ namespace mpc_engine::node::network
                     ctx->request.header.message_type,
                     std::string("Invalid request: ") + ToString(validation)
                 );
+                response.header.request_id = request_id;
 
                 utils::QueueResult result = ctx->send_queue->TryPush(
                     response, 
@@ -465,6 +467,7 @@ namespace mpc_engine::node::network
                     ctx->request.header.message_type,
                     "Handler not configured"
                 );
+                response.header.request_id = request_id;
 
                 utils::QueueResult result = ctx->send_queue->TryPush(
                     response, 
@@ -479,7 +482,11 @@ namespace mpc_engine::node::network
                 return;
             }
 
+            // 핸들러 호출
             response = ctx->handler(ctx->request);
+
+            // ✅ Request ID 복사 (가장 중요!)
+            response.header.request_id = request_id;
 
             if (response.Validate() != ValidationResult::OK) {
                 std::cerr << "[ERROR] Handler generated invalid response" << std::endl;
@@ -488,6 +495,7 @@ namespace mpc_engine::node::network
                     ctx->request.header.message_type,
                     "Handler generated invalid response"
                 );
+                response.header.request_id = request_id;
             }
 
         } catch (const std::bad_alloc& e) {
@@ -496,6 +504,7 @@ namespace mpc_engine::node::network
                 ctx->request.header.message_type,
                 "Server memory error"
             );
+            response.header.request_id = request_id;
 
         } catch (const std::exception& e) {
             std::cerr << "[ERROR] Handler exception: " << e.what() << std::endl;
@@ -503,6 +512,7 @@ namespace mpc_engine::node::network
                 ctx->request.header.message_type,
                 std::string("Handler error: ") + e.what()
             );
+            response.header.request_id = request_id;
 
         } catch (...) {
             std::cerr << "[ERROR] Unknown handler exception" << std::endl;
@@ -510,9 +520,10 @@ namespace mpc_engine::node::network
                 ctx->request.header.message_type,
                 "Unknown server error"
             );
+            response.header.request_id = request_id;
         }
 
-        // ✅ 응답 전송
+        // 응답 전송
         utils::QueueResult result = ctx->send_queue->TryPush(
             response, 
             std::chrono::milliseconds(1000)

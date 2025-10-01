@@ -9,8 +9,8 @@ namespace mpc_engine::node::network
         coordinator_socket = sock;
         coordinator_address = addr;
         coordinator_port = port;
-        session_start_time = utils::GetCurrentTimeMs();
-        last_activity_time = session_start_time;
+        connection_start_time = utils::GetCurrentTimeMs();
+        last_activity_time = connection_start_time;
         status = ConnectionStatus::CONNECTED;
     }
 

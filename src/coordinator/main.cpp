@@ -139,7 +139,14 @@ int main(int argc, char* argv[])
             return 1;
         }
         
+        // ✅ 한번만 로드
         std::vector<std::pair<std::string, uint16_t>> node_endpoints = env_config.GetNodeEndpoints("NODE_HOSTS");
+        std::vector<std::string> node_ids = env_config.GetStringArray("NODE_IDS");
+        std::vector<std::string> platforms = env_config.GetStringArray("NODE_PLATFORMS");
+        std::vector<uint16_t> shard_indices = env_config.GetUInt16Array("NODE_SHARD_INDICES");
+        uint32_t threshold = env_config.GetUInt32("MPC_THRESHOLD");
+        uint32_t total_shards = env_config.GetUInt32("MPC_TOTAL_SHARDS");
+        
         if (node_endpoints.empty()) {
             std::cerr << "No node endpoints configured" << std::endl;
             return 1;
@@ -154,13 +161,7 @@ int main(int argc, char* argv[])
         std::cout << std::endl;
         
         std::cout << "Registering nodes..." << std::endl;
-        std::vector<std::pair<std::string, uint16_t>> node_endpoints = env_config.GetNodeEndpoints("NODE_HOSTS");
-        std::vector<std::string> node_ids = env_config.GetStringArray("NODE_IDS");
-        std::vector<std::string> platforms = env_config.GetStringArray("NODE_PLATFORMS");
-        std::vector<uint16_t> shard_indices = env_config.GetUInt16Array("NODE_SHARD_INDICES");
-        uint32_t threshold = env_config.GetUInt32("MPC_THRESHOLD");
-        uint32_t total_shards = env_config.GetUInt32("MPC_TOTAL_SHARDS");
-            
+        
         for (size_t i = 0; i < node_endpoints.size(); ++i) {
             const auto& endpoint = node_endpoints[i];
             

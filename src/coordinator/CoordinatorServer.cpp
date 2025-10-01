@@ -93,14 +93,14 @@ namespace mpc_engine::coordinator
         std::unique_ptr<network::NodeTcpClient> node_client 
         = std::make_unique<network::NodeTcpClient>(node_id, address, port, platform, shard_index);
         
-        node_client->SetConnectedCallback([this](const network::NodeConnectionInfo& info) 
+        node_client->SetConnectedCallback([this](const std::string& node_id) 
         {
-            OnNodeStatusChanged(info.node_id, ConnectionStatus::CONNECTED);
+            OnNodeStatusChanged(node_id, ConnectionStatus::CONNECTED);
         });
         
-        node_client->SetDisconnectedCallback([this](const network::NodeConnectionInfo& info) 
+        node_client->SetDisconnectedCallback([this](const std::string& node_id) 
         {
-            OnNodeStatusChanged(info.node_id, ConnectionStatus::DISCONNECTED);
+            OnNodeStatusChanged(node_id, ConnectionStatus::DISCONNECTED);
         });
         
         node_clients[node_id] = std::move(node_client);
@@ -183,15 +183,49 @@ namespace mpc_engine::coordinator
 
     bool CoordinatorServer::BroadcastToNodes(const std::vector<std::string>& node_ids, const BaseRequest* request) 
     {
-        bool all_success = true;
-
+        if (node_ids.empty()) {
+            return true;
+        }
+    
+        // 1. 모든 Node에 비동기 요청
+        std::vector<std::pair<std::string, std::future<std::unique_ptr<BaseResponse>>>> futures;
+        
         for (const std::string& node_id : node_ids) 
         {
-            std::unique_ptr<BaseResponse> response = SendToNode(node_id, request);
-            if (!response || !response->success) 
-            {
+            // SendToNode()를 비동기로 실행
+            auto future = std::async(std::launch::async, [this, node_id, request]() {
+                return SendToNode(node_id, request);
+            });
+            
+            futures.emplace_back(node_id, std::move(future));
+        }
+    
+        // 2. 모든 응답 대기 및 결과 확인
+        bool all_success = true;
+        
+        for (auto& pair : futures) 
+        {
+            const std::string& node_id = pair.first;
+            
+            try {
+                // 타임아웃 35초 (SendRequest의 30초 + 여유 5초)
+                if (pair.second.wait_for(std::chrono::seconds(35)) == std::future_status::timeout) {
+                    std::cerr << "Broadcast timeout for node: " << node_id << std::endl;
+                    all_success = false;
+                    continue;
+                }
+                
+                std::unique_ptr<BaseResponse> response = pair.second.get();
+                
+                if (!response || !response->success) {
+                    std::cerr << "Broadcast failed for node: " << node_id << std::endl;
+                    all_success = false;
+                }
+                
+            } catch (const std::exception& e) {
+                std::cerr << "Broadcast exception for node: " << node_id 
+                          << ", error: " << e.what() << std::endl;
                 all_success = false;
-                std::cerr << "Failed to send request to node: " << node_id << std::endl;
             }
         }
         

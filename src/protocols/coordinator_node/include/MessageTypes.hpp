@@ -13,7 +13,6 @@ namespace mpc_engine::protocol::coordinator_node
     constexpr uint16_t PROTOCOL_VERSION = 0x0001;
     constexpr uint32_t MAX_BODY_SIZE = 1024 * 1024;  // 1MB
     constexpr uint32_t MIN_BODY_SIZE = 0;
-    constexpr size_t MAX_SESSION_ID_LENGTH = 15;
 
     // 검증 결과
     enum class ValidationResult : uint8_t 
@@ -57,18 +56,13 @@ namespace mpc_engine::protocol::coordinator_node
         uint32_t body_length;
         uint32_t checksum;
         uint64_t timestamp;
-        char session_id[16];
+        uint64_t request_id;
 
-        MessageHeader() : message_type(0), body_length(0), checksum(0), timestamp(0) 
-        {
-            memset(session_id, 0, sizeof(session_id));
-        }
+        MessageHeader() 
+            : message_type(0), body_length(0), checksum(0), timestamp(0), request_id(0) {}
 
         MessageHeader(uint16_t type, uint32_t length) 
-            : message_type(type), body_length(length), checksum(0), timestamp(0) 
-        {
-            memset(session_id, 0, sizeof(session_id));
-        }
+            : message_type(type), body_length(length), checksum(0), timestamp(0), request_id(0) {}
 
         // 기본 헤더 검증
         ValidationResult ValidateBasic() const 
@@ -101,17 +95,6 @@ namespace mpc_engine::protocol::coordinator_node
         bool IsValid() const 
         {
             return ValidateBasic() == ValidationResult::OK && IsValidMessageType();
-        }
-
-        void SetSessionId(const std::string& id) 
-        {
-            memset(session_id, 0, sizeof(session_id));
-            strncpy(session_id, id.c_str(), MAX_SESSION_ID_LENGTH);
-        }
-
-        std::string GetSessionId() const 
-        {
-            return std::string(session_id, strnlen(session_id, sizeof(session_id)));
         }
 
         // Checksum 계산 (간단한 XOR 체크섬)

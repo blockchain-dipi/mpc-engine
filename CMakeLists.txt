@@ -55,7 +55,7 @@ target_link_libraries(node_network
     Threads::Threads
 )
 
-# === Coordinator 네트워크 (Node 클라이언트만) ===
+# === Coordinator 네트워크 (Node 클라이언트) ===
 add_library(coordinator_node_network STATIC
     src/coordinator/network/node_client/src/NodeConnectionInfo.cpp
     src/coordinator/network/node_client/src/NodeTcpClient.cpp
@@ -68,13 +68,13 @@ target_link_libraries(coordinator_node_network
     Threads::Threads
 )
 
-# === Node 실행 파일 ===
-add_executable(node 
-    src/node/main.cpp
+# === Node 서버 라이브러리 ===
+add_library(node_server STATIC
     src/node/NodeServer.cpp
 )
 
-target_link_libraries(node
+target_include_directories(node_server PUBLIC src)
+target_link_libraries(node_server 
     node_network
     node_handlers
     mpc_common
@@ -82,17 +82,35 @@ target_link_libraries(node
     Threads::Threads
 )
 
-# === Coordinator 실행 파일 ===
-add_executable(coordinator 
-    src/coordinator/main.cpp
+# === Coordinator 서버 라이브러리 ===
+add_library(coordinator_server STATIC
     src/coordinator/CoordinatorServer.cpp
 )
 
-target_link_libraries(coordinator
-    mpc_common
+target_include_directories(coordinator_server PUBLIC src)
+target_link_libraries(coordinator_server
     coordinator_node_network
     coordinator_node_protocol
+    mpc_common
     Threads::Threads
+)
+
+# === Node 실행 파일 ===
+add_executable(node 
+    src/node/main.cpp
+)
+
+target_link_libraries(node
+    node_server
+)
+
+# === Coordinator 실행 파일 ===
+add_executable(coordinator 
+    src/coordinator/main.cpp
+)
+
+target_link_libraries(coordinator
+    coordinator_server
 )
 
 # === 테스트 (별도 파일) ===

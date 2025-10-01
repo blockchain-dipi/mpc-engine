@@ -10,8 +10,7 @@ namespace mpc_engine::node::network
         socket_t coordinator_socket = INVALID_SOCKET_VALUE;
         std::string coordinator_address;
         uint16_t coordinator_port = 0;
-        std::string session_id;
-        uint64_t session_start_time = 0;
+        uint64_t connection_start_time = 0;
         uint64_t last_activity_time = 0;
         uint32_t total_requests_handled = 0;
         uint32_t successful_requests = 0;
