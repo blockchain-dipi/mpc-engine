@@ -38,7 +38,7 @@ void PrintUsage(const char* program_name)
     std::cout << "  production  Production environment" << std::endl;
 }
 
-void PrintSystemStatus(CoordinatorServer& coordinator, const EnvConfig& env_config) 
+void PrintSystemStatus(CoordinatorServer& coordinator) 
 {
     CoordinatorStats stats = coordinator.GetStats();
     std::cout << "[" << mpc_engine::utils::GetCurrentTimeMs() << "] Coordinator Stats:" << std::endl;
@@ -47,10 +47,6 @@ void PrintSystemStatus(CoordinatorServer& coordinator, const EnvConfig& env_conf
     std::cout << "  Ready Nodes: " << stats.ready_nodes << std::endl;
     std::cout << "  Uptime: " << stats.uptime_seconds << "s" << std::endl;
     
-    std::cout << "  MPC Config:" << std::endl;
-    std::cout << "    Threshold: " << env_config.GetUInt32("MPC_THRESHOLD", 2) << std::endl;
-    std::cout << "    Total Shards: " << env_config.GetUInt32("MPC_TOTAL_SHARDS", 3) << std::endl;
-
     std::vector<std::string> connected_nodes = coordinator.GetConnectedNodeIds();
     if (!connected_nodes.empty()) {
         std::cout << "  Connected Nodes: ";
@@ -70,6 +66,21 @@ void PrintSystemStatus(CoordinatorServer& coordinator, const EnvConfig& env_conf
               << ", IBM=" << ibm_nodes.size() 
               << ", Azure=" << azure_nodes.size() << std::endl;
     std::cout << std::endl;
+}
+
+void ValidateCoordinatorConfig(const EnvConfig& config) {
+    std::vector<std::string> required_keys = {
+        "NODE_HOSTS",
+        "NODE_IDS",
+        "NODE_PLATFORMS",
+        "NODE_SHARD_INDICES",
+        "MPC_THRESHOLD",
+        "MPC_TOTAL_SHARDS"
+    };
+    
+    std::cout << "Validating required configuration..." << std::endl;
+    config.ValidateRequired(required_keys);
+    std::cout << "✓ All required configurations present" << std::endl;
 }
 
 int main(int argc, char* argv[]) 
@@ -100,6 +111,14 @@ int main(int argc, char* argv[])
     EnvConfig env_config;
     if (!env_config.LoadFromEnv(env_type)) {
         std::cerr << "Failed to load environment configuration: " << env_type << std::endl;
+        return 1;
+    }
+    
+    try {
+        ValidateCoordinatorConfig(env_config);
+    } catch (const std::exception& e) {
+        std::cerr << "✗ Configuration error: " << e.what() << std::endl;
+        std::cerr << "\nPlease check your env/.env." << env_type << " file." << std::endl;
         return 1;
     }
     
@@ -135,9 +154,12 @@ int main(int argc, char* argv[])
         std::cout << std::endl;
         
         std::cout << "Registering nodes..." << std::endl;
+        std::vector<std::pair<std::string, uint16_t>> node_endpoints = env_config.GetNodeEndpoints("NODE_HOSTS");
         std::vector<std::string> node_ids = env_config.GetStringArray("NODE_IDS");
         std::vector<std::string> platforms = env_config.GetStringArray("NODE_PLATFORMS");
         std::vector<uint16_t> shard_indices = env_config.GetUInt16Array("NODE_SHARD_INDICES");
+        uint32_t threshold = env_config.GetUInt32("MPC_THRESHOLD");
+        uint32_t total_shards = env_config.GetUInt32("MPC_TOTAL_SHARDS");
             
         for (size_t i = 0; i < node_endpoints.size(); ++i) {
             const auto& endpoint = node_endpoints[i];
@@ -153,8 +175,8 @@ int main(int argc, char* argv[])
         
         std::cout << "\nCoordinator is running... Press Ctrl+C to stop." << std::endl;
         std::cout << "MPC Configuration:" << std::endl;
-        std::cout << "  Threshold: " << env_config.GetUInt32("MPC_THRESHOLD", 2) << std::endl;
-        std::cout << "  Total Shards: " << env_config.GetUInt32("MPC_TOTAL_SHARDS", 3) << std::endl;
+        std::cout << "  Threshold: " << threshold << std::endl;
+        std::cout << "  Total Shards: " << total_shards << std::endl;
         std::cout << std::endl;
         
         std::cout << "Connecting to all nodes..." << std::endl;
@@ -169,9 +191,12 @@ int main(int argc, char* argv[])
 
         while (coordinator.IsRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(30));
-            PrintSystemStatus(coordinator, env_config);
+            PrintSystemStatus(coordinator);
         }
         
+    } catch (const ConfigMissingException& e) {
+        std::cerr << "✗ Configuration error: " << e.what() << std::endl;
+        return 1;
     } catch (const std::exception& e) {
         std::cerr << "Coordinator error: " << e.what() << std::endl;
         return 1;

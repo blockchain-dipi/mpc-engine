@@ -37,68 +37,68 @@ namespace mpc_engine::config
         return LoadFromFile(file_path);
     }
 
-    std::string EnvConfig::GetString(const std::string& key, const std::string& default_value) const 
+    // ========================================
+    // 모든 값은 필수 (없으면 예외)
+    // ========================================
+
+    std::string EnvConfig::GetString(const std::string& key) const 
     {
-        std::unordered_map<std::string, std::string>::const_iterator it = config_map.find(key);
-        return (it != config_map.end()) ? it->second : default_value;
+        auto it = config_map.find(key);
+        if (it == config_map.end() || it->second.empty()) {
+            throw ConfigMissingException(key);
+        }
+        return it->second;
     }
 
-    uint16_t EnvConfig::GetUInt16(const std::string& key, uint16_t default_value) const 
+    uint16_t EnvConfig::GetUInt16(const std::string& key) const 
     {
-        std::string value = GetString(key);
-        if (value.empty()) 
-        {
-            return default_value;
-        }
-        try 
-        {
-            return static_cast<uint16_t>(std::stoul(value));
-        }
-        catch (...) 
-        {
-            return default_value;
+        std::string value = GetString(key);  // 예외 발생 가능
+        
+        try {
+            unsigned long parsed = std::stoul(value);
+            if (parsed > UINT16_MAX) {
+                throw std::out_of_range("Value too large for uint16_t");
+            }
+            return static_cast<uint16_t>(parsed);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Invalid uint16 value for key '" + key + "': " + value);
         }
     }
 
-    uint32_t EnvConfig::GetUInt32(const std::string& key, uint32_t default_value) const 
+    uint32_t EnvConfig::GetUInt32(const std::string& key) const 
     {
-        std::string value = GetString(key);
-        if (value.empty()) 
-        {
-            return default_value;
-        }
-        try 
-        {
+        std::string value = GetString(key);  // 예외 발생 가능
+        
+        try {
             return static_cast<uint32_t>(std::stoul(value));
-        }
-        catch (...) 
-        {
-            return default_value;
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Invalid uint32 value for key '" + key + "': " + value);
         }
     }
 
-    bool EnvConfig::GetBool(const std::string& key, bool default_value) const 
+    bool EnvConfig::GetBool(const std::string& key) const 
     {
-        std::string value = GetString(key);
-        if (value.empty())
-        {
-            return default_value;
-        }
+        std::string value = GetString(key);  // 예외 발생 가능
+        
         std::transform(value.begin(), value.end(), value.begin(), ::tolower);
-        return (value == "true" || value == "1" || value == "yes" || value == "on");
+        
+        if (value == "true" || value == "1" || value == "yes" || value == "on") {
+            return true;
+        } else if (value == "false" || value == "0" || value == "no" || value == "off") {
+            return false;
+        } else {
+            throw std::runtime_error("Invalid boolean value for key '" + key + "': " + value);
+        }
     }
 
     std::vector<std::string> EnvConfig::GetStringArray(const std::string& key) const 
     {
-        std::string value = GetString(key);
-        if (value.empty())
-        {
-            return {};
-        }
+        std::string value = GetString(key);  // 예외 발생 가능 (빈 문자열도 예외)
 
         std::vector<std::string> result;
         std::stringstream ss(value);
         std::string item;
+        
         while (std::getline(ss, item, ',')) 
         {
             // 앞뒤 공백 제거
@@ -109,69 +109,106 @@ namespace mpc_engine::config
             } else {
                 item.clear();
             }
-            if (!item.empty()) 
-            {
+            
+            if (!item.empty()) {
                 result.push_back(item);
             }
         }
+        
+        if (result.empty()) {
+            throw ConfigMissingException(key + " (array is empty)");
+        }
+        
         return result;
     }
 
     std::vector<uint16_t> EnvConfig::GetUInt16Array(const std::string& key) const 
     {
-        std::vector<std::string> str_array = GetStringArray(key);
+        std::vector<std::string> str_array = GetStringArray(key);  // 예외 발생 가능
         std::vector<uint16_t> result;
 
         for (const std::string& str : str_array)
         {
-            try 
-            {
-                result.push_back(static_cast<uint16_t>(std::stoul(str)));
-            }
-            catch (...) 
-            {
-                result.push_back(0);
+            try {
+                unsigned long parsed = std::stoul(str);
+                if (parsed > UINT16_MAX) {
+                    throw std::out_of_range("Value too large");
+                }
+                result.push_back(static_cast<uint16_t>(parsed));
+            } catch (const std::exception& e) {
+                throw std::runtime_error("Invalid uint16 value in array '" + key + "': " + str);
             }
         }
+        
         return result;
     }
 
     std::vector<std::pair<std::string, uint16_t>> EnvConfig::GetNodeEndpoints(const std::string& key) const 
     {
-        std::vector<std::string> str_array = GetStringArray(key);
+        std::vector<std::string> str_array = GetStringArray(key);  // 예외 발생 가능
         std::vector<std::pair<std::string, uint16_t>> result;
 
         for (const std::string& endpoint : str_array)
         {
             size_t colon_pos = endpoint.find(':');
-            if (colon_pos != std::string::npos) 
-            {
-                std::string host = endpoint.substr(0, colon_pos);
-                std::string port_str = endpoint.substr(colon_pos + 1);
-                // 앞뒤 공백 제거
-                host.erase(0, host.find_first_not_of(" \t"));
-                host.erase(host.find_last_not_of(" \t") + 1);
-                port_str.erase(0, port_str.find_first_not_of(" \t"));
-                port_str.erase(port_str.find_last_not_of(" \t") + 1);
-                try 
-                {
-                    uint16_t port = static_cast<uint16_t>(std::stoul(port_str));
-                    if (!host.empty() && port > 0) {
-                        result.emplace_back(host, port);
-                    }
+            if (colon_pos == std::string::npos) {
+                throw std::runtime_error("Invalid endpoint format in '" + key + "': " + endpoint + " (expected host:port)");
+            }
+            
+            std::string host = endpoint.substr(0, colon_pos);
+            std::string port_str = endpoint.substr(colon_pos + 1);
+            
+            // 앞뒤 공백 제거
+            host.erase(0, host.find_first_not_of(" \t"));
+            host.erase(host.find_last_not_of(" \t") + 1);
+            port_str.erase(0, port_str.find_first_not_of(" \t"));
+            port_str.erase(port_str.find_last_not_of(" \t") + 1);
+            
+            if (host.empty()) {
+                throw std::runtime_error("Empty host in endpoint '" + key + "': " + endpoint);
+            }
+            
+            try {
+                unsigned long parsed = std::stoul(port_str);
+                if (parsed == 0 || parsed > UINT16_MAX) {
+                    throw std::out_of_range("Port out of range");
                 }
-                catch (...) 
-                {
-                    // 파싱 실패 시 무시
-                }
+                uint16_t port = static_cast<uint16_t>(parsed);
+                result.emplace_back(host, port);
+            } catch (const std::exception& e) {
+                throw std::runtime_error("Invalid port in endpoint '" + key + "': " + endpoint);
             }
         }
+        
         return result;
     }
 
     bool EnvConfig::HasKey(const std::string& key) const 
     {
         return config_map.find(key) != config_map.end();
+    }
+
+    void EnvConfig::ValidateRequired(const std::vector<std::string>& required_keys) const 
+    {
+        std::vector<std::string> missing_keys;
+        
+        for (const std::string& key : required_keys) {
+            if (!HasKey(key) || config_map.at(key).empty()) {
+                missing_keys.push_back(key);
+            }
+        }
+        
+        if (!missing_keys.empty()) {
+            std::stringstream ss;
+            ss << "Missing required configuration keys: ";
+            for (size_t i = 0; i < missing_keys.size(); ++i) {
+                ss << missing_keys[i];
+                if (i < missing_keys.size() - 1) {
+                    ss << ", ";
+                }
+            }
+            throw std::runtime_error(ss.str());
+        }
     }
 
     bool EnvConfig::ParseLine(const std::string& line) 
@@ -186,6 +223,7 @@ namespace mpc_engine::config
         {
             return true;
         }
+        
         size_t eq_pos = trimmed.find('=');
         if (eq_pos == std::string::npos) 
         {
@@ -194,6 +232,7 @@ namespace mpc_engine::config
 
         std::string key = trimmed.substr(0, eq_pos);
         std::string value = trimmed.substr(eq_pos + 1);
+        
         // 앞뒤 공백 제거
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);
@@ -205,6 +244,7 @@ namespace mpc_engine::config
             config_map[key] = value;
             return true;
         }
+        
         return false;
     }
 } // namespace mpc_engine::config

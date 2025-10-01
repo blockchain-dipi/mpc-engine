@@ -2,6 +2,7 @@
 #include "node/network/include/NodeTcpServer.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/utils/firewall/KernelFirewall.hpp"
+#include "common/utils/threading/ThreadUtils.hpp"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -115,40 +116,67 @@ namespace mpc_engine::node::network
         std::cout << "Stopping NodeTcpServer..." << std::endl;
         is_running = false;
 
-        // Close server socket (will unblock accept())
+        // 🔹 1단계: 서버 소켓 종료 (accept 차단)
         if (server_socket != INVALID_SOCKET_VALUE) {
             utils::CloseSocket(server_socket);
             server_socket = INVALID_SOCKET_VALUE;
         }
 
-        // 커널 방화벽 규칙 제거
+        // 🔹 2단계: 커널 방화벽 규칙 제거
         if (enable_kernel_firewall) {
             std::cout << "[SECURITY] Removing kernel firewall rules..." << std::endl;
             utils::KernelFirewall::RemoveNodeFirewall(bind_port);
         }
 
-        // Close connection (will unblock recv())
+        // 🔹 3단계: 기존 연결 강제 종료 (recv 차단)
         ForceCloseExistingConnection();
 
-        // Shutdown thread pool
+        // 🔹 4단계: ThreadPool Shutdown
         if (handler_pool) {
+            std::cout << "[ThreadPool] Shutting down handlers..." << std::endl;
             handler_pool->Shutdown();
         }
 
-        // Shutdown send queue
+        // 🔹 5단계: Send Queue Shutdown
         if (send_queue) {
+            std::cout << "[Queue] Shutting down send queue..." << std::endl;
             send_queue->Shutdown();
         }
 
-        // Join threads
+        // 🆕 6단계: 스레드 안전 종료 (타임아웃 적용)
+        constexpr uint32_t THREAD_JOIN_TIMEOUT_MS = 5000;  // 5초
+        
+        std::cout << "[Threads] Waiting for threads to stop (timeout: " 
+                  << THREAD_JOIN_TIMEOUT_MS << "ms)..." << std::endl;
+
+        // Connection thread
         if (connection_thread.joinable()) {
-            connection_thread.join();
+            utils::JoinResult result = utils::JoinWithTimeout(connection_thread, THREAD_JOIN_TIMEOUT_MS);
+            std::cout << "  Connection thread: " << utils::ToString(result) << std::endl;
+            
+            if (result == utils::JoinResult::TIMEOUT) {
+                std::cerr << "  ⚠️  Connection thread did not stop in time!" << std::endl;
+            }
         }
+
+        // Receive thread
         if (receive_thread.joinable()) {
-            receive_thread.join();
+            utils::JoinResult result = utils::JoinWithTimeout(receive_thread, THREAD_JOIN_TIMEOUT_MS);
+            std::cout << "  Receive thread: " << utils::ToString(result) << std::endl;
+            
+            if (result == utils::JoinResult::TIMEOUT) {
+                std::cerr << "  ⚠️  Receive thread did not stop in time!" << std::endl;
+            }
         }
+
+        // Send thread
         if (send_thread.joinable()) {
-            send_thread.join();
+            utils::JoinResult result = utils::JoinWithTimeout(send_thread, THREAD_JOIN_TIMEOUT_MS);
+            std::cout << "  Send thread: " << utils::ToString(result) << std::endl;
+            
+            if (result == utils::JoinResult::TIMEOUT) {
+                std::cerr << "  ⚠️  Send thread did not stop in time!" << std::endl;
+            }
         }
 
         std::cout << "NodeTcpServer stopped" << std::endl;
@@ -397,7 +425,9 @@ namespace mpc_engine::node::network
     {
         using namespace protocol::coordinator_node;
 
-        if (!context) {
+        std::unique_ptr<HandlerContext> ctx(context);
+
+        if (!ctx) {
             std::cerr << "[ERROR] ProcessMessage received null context" << std::endl;
             return;
         }
@@ -405,59 +435,57 @@ namespace mpc_engine::node::network
         NetworkMessage response;
 
         try {
-            ValidationResult validation = context->request.Validate();
+            // ✅ ctx-> 사용 (context 대신)
+            ValidationResult validation = ctx->request.Validate();
             if (validation != ValidationResult::OK) {
                 std::cerr << "[ERROR] Invalid request in handler: " << ToString(validation) << std::endl;
 
                 response = CreateErrorResponse(
-                    context->request.header.message_type,
+                    ctx->request.header.message_type,
                     std::string("Invalid request: ") + ToString(validation)
                 );
 
-                // 🆕 QueueResult 사용
-                utils::QueueResult result = context->send_queue->TryPush(
+                utils::QueueResult result = ctx->send_queue->TryPush(
                     response, 
                     std::chrono::milliseconds(100)
                 );
-                
+
                 if (result != utils::QueueResult::SUCCESS) {
                     std::cerr << "[ERROR] Failed to push response: " 
                               << utils::ToString(result) << std::endl;
                 }
-                
-                delete context;
+
                 return;
             }
 
-            if (!context->handler) {
+            if (!ctx->handler) {
                 std::cerr << "[ERROR] Handler is null" << std::endl;
 
                 response = CreateErrorResponse(
-                    context->request.header.message_type,
+                    ctx->request.header.message_type,
                     "Handler not configured"
                 );
 
-                utils::QueueResult result = context->send_queue->TryPush(
+                utils::QueueResult result = ctx->send_queue->TryPush(
                     response, 
                     std::chrono::milliseconds(100)
                 );
-                
+
                 if (result != utils::QueueResult::SUCCESS) {
                     std::cerr << "[ERROR] Failed to push response: " 
                               << utils::ToString(result) << std::endl;
                 }
-                
-                delete context;
+
                 return;
             }
 
-            response = context->handler(context->request);
+            response = ctx->handler(ctx->request);
 
             if (response.Validate() != ValidationResult::OK) {
                 std::cerr << "[ERROR] Handler generated invalid response" << std::endl;
 
                 response = CreateErrorResponse(
-                    context->request.header.message_type,
+                    ctx->request.header.message_type,
                     "Handler generated invalid response"
                 );
             }
@@ -465,31 +493,31 @@ namespace mpc_engine::node::network
         } catch (const std::bad_alloc& e) {
             std::cerr << "[ERROR] Memory allocation error in handler: " << e.what() << std::endl;
             response = CreateErrorResponse(
-                context->request.header.message_type,
+                ctx->request.header.message_type,
                 "Server memory error"
             );
 
         } catch (const std::exception& e) {
             std::cerr << "[ERROR] Handler exception: " << e.what() << std::endl;
             response = CreateErrorResponse(
-                context->request.header.message_type,
+                ctx->request.header.message_type,
                 std::string("Handler error: ") + e.what()
             );
 
         } catch (...) {
             std::cerr << "[ERROR] Unknown handler exception" << std::endl;
             response = CreateErrorResponse(
-                context->request.header.message_type,
+                ctx->request.header.message_type,
                 "Unknown server error"
             );
         }
 
-        // 🆕 QueueResult 사용 (더 긴 타임아웃)
-        utils::QueueResult result = context->send_queue->TryPush(
+        // ✅ 응답 전송
+        utils::QueueResult result = ctx->send_queue->TryPush(
             response, 
             std::chrono::milliseconds(1000)
         );
-        
+
         if (result == utils::QueueResult::TIMEOUT) {
             std::cerr << "[ERROR] Failed to push response to send queue: timeout after 1000ms" << std::endl;
         } else if (result == utils::QueueResult::SHUTDOWN) {
@@ -497,8 +525,6 @@ namespace mpc_engine::node::network
         } else if (result != utils::QueueResult::SUCCESS) {
             std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
         }
-
-        delete context;
     }
 
     bool NodeTcpServer::IsAuthorized(const std::string& client_ip)

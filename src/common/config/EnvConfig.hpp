@@ -4,9 +4,17 @@
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
+#include <stdexcept>
 
 namespace mpc_engine::config
 {
+    // 설정 누락 예외
+    class ConfigMissingException : public std::runtime_error {
+    public:
+        explicit ConfigMissingException(const std::string& key) 
+            : std::runtime_error("Required config missing: " + key) {}
+    };
+
     class EnvConfig 
     {
     private:
@@ -20,19 +28,17 @@ namespace mpc_engine::config
 
         // 환경 설정 파일 로드
         bool LoadFromFile(const std::string& file_path);
-        bool LoadFromEnv(const std::string& env_name);  // env/.env.{env_name}
+        bool LoadFromEnv(const std::string& env_name);
 
-        // 설정값 조회
-        std::string GetString(const std::string& key, const std::string& default_value = "") const;
-        uint16_t GetUInt16(const std::string& key, uint16_t default_value = 0) const;
-        uint32_t GetUInt32(const std::string& key, uint32_t default_value = 0) const;
-        bool GetBool(const std::string& key, bool default_value = false) const;
+        // 모든 값은 필수 (없으면 예외 발생)
+        std::string GetString(const std::string& key) const;
+        uint16_t GetUInt16(const std::string& key) const;
+        uint32_t GetUInt32(const std::string& key) const;
+        bool GetBool(const std::string& key) const;
 
-        // 배열 형태 설정값 조회 (콤마로 구분된 값들)
+        // 배열 형태 설정값 조회 (모두 필수)
         std::vector<std::string> GetStringArray(const std::string& key) const;
         std::vector<uint16_t> GetUInt16Array(const std::string& key) const;
-
-        // 노드 엔드포인트 파싱 (host:port 형태)
         std::vector<std::pair<std::string, uint16_t>> GetNodeEndpoints(const std::string& key) const;
 
         // 설정값 존재 여부 확인
@@ -42,8 +48,10 @@ namespace mpc_engine::config
         std::string GetEnvType() const { return env_type; }
         bool IsLoaded() const { return is_loaded; }
 
+        // 여러 필수 키 한번에 검증
+        void ValidateRequired(const std::vector<std::string>& required_keys) const;
+
     private:
-        // 파일 파싱 헬퍼
         bool ParseLine(const std::string& line);
     };
 } // namespace mpc_engine::config
