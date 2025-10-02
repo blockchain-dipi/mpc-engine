@@ -3,8 +3,12 @@
 #include "common/types/BasicTypes.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/config/EnvConfig.hpp"
+#include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include <iostream>
 #include <signal.h>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 #include <chrono>
 #include <vector>
@@ -12,18 +16,27 @@
 using namespace mpc_engine::coordinator;
 using namespace mpc_engine::node;
 using namespace mpc_engine::config;
+using namespace mpc_engine::protocol::coordinator_node;
 
-CoordinatorServer* g_coordinator = nullptr;
+// 전역 상태 관리
+static CoordinatorServer* g_coordinator = nullptr;
+static std::atomic<bool> g_shutdown_requested{false};
+static std::condition_variable g_shutdown_cv;
+static std::mutex g_shutdown_mutex;
 
 void SignalHandler(int signal) 
 {
     std::cout << "\nReceived signal " << signal << ", shutting down gracefully..." << std::endl;
     
-    if (g_coordinator) 
-    {
+    if (g_coordinator) {
         g_coordinator->Stop();
     }
-    exit(0);
+    
+    {
+        std::lock_guard<std::mutex> lock(g_shutdown_mutex);
+        g_shutdown_requested.store(true);
+    }
+    g_shutdown_cv.notify_one();
 }
 
 void PrintUsage(const char* program_name) 
@@ -36,36 +49,6 @@ void PrintUsage(const char* program_name)
     std::cout << "  dev         Development environment" << std::endl;
     std::cout << "  qa          QA environment" << std::endl;
     std::cout << "  production  Production environment" << std::endl;
-}
-
-void PrintSystemStatus(CoordinatorServer& coordinator) 
-{
-    CoordinatorStats stats = coordinator.GetStats();
-    std::cout << "[" << mpc_engine::utils::GetCurrentTimeMs() << "] Coordinator Stats:" << std::endl;
-    std::cout << "  Total Nodes: " << stats.total_nodes << std::endl;
-    std::cout << "  Connected Nodes: " << stats.connected_nodes << std::endl;
-    std::cout << "  Ready Nodes: " << stats.ready_nodes << std::endl;
-    std::cout << "  Uptime: " << stats.uptime_seconds << "s" << std::endl;
-    
-    std::vector<std::string> connected_nodes = coordinator.GetConnectedNodeIds();
-    if (!connected_nodes.empty()) {
-        std::cout << "  Connected Nodes: ";
-        for (const std::string& node_id : connected_nodes) {
-            std::cout << node_id << "(" << coordinator.GetNodeEndpoint(node_id) << ") ";
-        }
-        std::cout << std::endl;
-    }
-    
-    std::vector<std::string> local_nodes = coordinator.GetNodesByPlatform(NodePlatformType::LOCAL);
-    std::vector<std::string> aws_nodes = coordinator.GetNodesByPlatform(NodePlatformType::AWS);
-    std::vector<std::string> ibm_nodes = coordinator.GetNodesByPlatform(NodePlatformType::IBM);
-    std::vector<std::string> azure_nodes = coordinator.GetNodesByPlatform(NodePlatformType::AZURE);
-    
-    std::cout << "  Platform Distribution: LOCAL=" << local_nodes.size() 
-              << ", AWS=" << aws_nodes.size()
-              << ", IBM=" << ibm_nodes.size() 
-              << ", Azure=" << azure_nodes.size() << std::endl;
-    std::cout << std::endl;
 }
 
 void ValidateCoordinatorConfig(const EnvConfig& config) {
@@ -90,6 +73,7 @@ int main(int argc, char* argv[])
     std::cout << "Build: " << __DATE__ << " " << __TIME__ << std::endl;
     std::cout << std::endl;
     
+    // 명령행 인자 파싱
     std::string env_type = "local";
     
     for (int i = 1; i < argc; ++i) {
@@ -108,6 +92,7 @@ int main(int argc, char* argv[])
     
     std::cout << "Loading environment: " << env_type << std::endl;
     
+    // 환경 설정 로드
     EnvConfig env_config;
     if (!env_config.LoadFromEnv(env_type)) {
         std::cerr << "Failed to load environment configuration: " << env_type << std::endl;
@@ -126,6 +111,7 @@ int main(int argc, char* argv[])
         CoordinatorServer& coordinator = CoordinatorServer::Instance();
         g_coordinator = &coordinator;
         
+        // 시그널 핸들러 등록
         signal(SIGINT, SignalHandler);
         signal(SIGTERM, SignalHandler);
         
@@ -139,7 +125,7 @@ int main(int argc, char* argv[])
             return 1;
         }
         
-        // ✅ 한번만 로드
+        // Config 로드
         std::vector<std::pair<std::string, uint16_t>> node_endpoints = env_config.GetNodeEndpoints("NODE_HOSTS");
         std::vector<std::string> node_ids = env_config.GetStringArray("NODE_IDS");
         std::vector<std::string> platforms = env_config.GetStringArray("NODE_PLATFORMS");
@@ -152,16 +138,19 @@ int main(int argc, char* argv[])
             return 1;
         }
         
-        std::cout << "Coordinator configuration:" << std::endl;
+        std::cout << "\nCoordinator configuration:" << std::endl;
         std::cout << "  Environment: " << env_type << std::endl;
+        std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
         std::cout << "  Target Nodes:" << std::endl;
-        for (const auto& endpoint : node_endpoints) {
-            std::cout << "    " << endpoint.first << ":" << endpoint.second << std::endl;
+        for (size_t i = 0; i < node_endpoints.size(); ++i) {
+            const auto& endpoint = node_endpoints[i];
+            std::string node_id = (i < node_ids.size()) ? node_ids[i] : "node_" + std::to_string(i + 1);
+            std::cout << "    " << node_id << " - " << endpoint.first << ":" << endpoint.second << std::endl;
         }
         std::cout << std::endl;
         
+        // Node 등록
         std::cout << "Registering nodes..." << std::endl;
-        
         for (size_t i = 0; i < node_endpoints.size(); ++i) {
             const auto& endpoint = node_endpoints[i];
             
@@ -170,29 +159,40 @@ int main(int argc, char* argv[])
             uint32_t shard_index = (i < shard_indices.size()) ? shard_indices[i] : static_cast<uint32_t>(i);
             
             if (coordinator.RegisterNode(node_id, platform, endpoint.first, endpoint.second, shard_index)) {
-                std::cout << "  Registered: " << node_id << " at " << endpoint.first << ":" << endpoint.second << std::endl;
+                std::cout << "  ✓ " << node_id << std::endl;
             }
         }
-        
-        std::cout << "\nCoordinator is running... Press Ctrl+C to stop." << std::endl;
-        std::cout << "MPC Configuration:" << std::endl;
-        std::cout << "  Threshold: " << threshold << std::endl;
-        std::cout << "  Total Shards: " << total_shards << std::endl;
         std::cout << std::endl;
         
-        std::cout << "Connecting to all nodes..." << std::endl;
+        // Node 연결
+        std::cout << "Connecting to nodes..." << std::endl;
+        int connected_count = 0;
         for (const auto& node_id : coordinator.GetAllNodeIds()) {
             if (coordinator.ConnectToNode(node_id)) {
-                std::cout << "  Connected to: " << node_id << std::endl;
+                std::cout << "  ✓ " << node_id << std::endl;
+                connected_count++;
             } else {
-                std::cout << "  Failed to connect to: " << node_id << std::endl;
+                std::cout << "  ✗ " << node_id << " (connection failed)" << std::endl;
             }
         }
         std::cout << std::endl;
+        
+        // 시작 정보 출력
+        std::cout << "========================================" << std::endl;
+        std::cout << "  Coordinator Server Running" << std::endl;
+        std::cout << "========================================" << std::endl;
+        std::cout << "  Connected Nodes: " << connected_count << "/" << node_endpoints.size() << std::endl;
+        std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
+        std::cout << "========================================" << std::endl;
+        std::cout << "Server is running. Press Ctrl+C to stop." << std::endl;
+        std::cout << std::endl;
 
-        while (coordinator.IsRunning()) {
-            std::this_thread::sleep_for(std::chrono::seconds(30));
-            PrintSystemStatus(coordinator);
+        // 메인 루프: 조건 변수로 대기 (CPU 0%)
+        {
+            std::unique_lock<std::mutex> lock(g_shutdown_mutex);
+            g_shutdown_cv.wait(lock, []{ 
+                return g_shutdown_requested.load() || !g_coordinator->IsRunning(); 
+            });
         }
         
     } catch (const ConfigMissingException& e) {

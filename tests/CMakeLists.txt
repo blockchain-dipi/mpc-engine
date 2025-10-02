@@ -108,6 +108,26 @@ target_link_libraries(test_coordinator_node_basic
 
 add_test(NAME CoordinatorNodeBasic COMMAND test_coordinator_node_basic)
 
+# === Manual Test (실제 Node 서버 필요) ===
+add_executable(test_coordinator_with_real_nodes
+    manual/coordinator_with_real_nodes_test.cpp
+)
+
+target_include_directories(test_coordinator_with_real_nodes PRIVATE
+    ${TEST_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_coordinator_with_real_nodes
+    coordinator_server
+    coordinator_node_protocol
+    mpc_common
+    Threads::Threads
+)
+
+# 일반 테스트에는 포함하지 않음 (수동 실행 전용)
+# add_test(NAME CoordinatorWithRealNodes COMMAND test_coordinator_with_real_nodes)
+message(STATUS "  - test_coordinator_with_real_nodes (manual)")
+
 # === 테스트 빌드 정보 ===
 message(STATUS "=== Test Configuration ===")
 message(STATUS "Test executables:")
