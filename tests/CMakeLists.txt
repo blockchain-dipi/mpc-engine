@@ -51,6 +51,23 @@ target_link_libraries(test_socket_io
 
 add_test(NAME SocketIO COMMAND test_socket_io)
 
+# === Local KMS 테스트 ===
+add_executable(test_local_kms
+    unit/local_kms_test.cpp
+)
+
+target_include_directories(test_local_kms PRIVATE
+    ${TEST_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_local_kms
+    mpc_kms
+    mpc_common
+    Threads::Threads
+)
+
+add_test(NAME LocalKMS COMMAND test_local_kms)
+
 # integration 테스트 ==========================================================================================
 # === Node TCP Server 테스트 ===
 add_executable(test_node_tcp_server
@@ -137,4 +154,5 @@ message(STATUS "  - test_socket_io")
 message(STATUS "  - test_node_tcp_server")
 message(STATUS "  - test_message_validation")
 message(STATUS "  - test_coordinator_node_basic")
+message(STATUS "  - test_local_kms")
 message(STATUS "==========================")

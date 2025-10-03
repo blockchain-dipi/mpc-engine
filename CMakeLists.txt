@@ -22,6 +22,19 @@ add_library(mpc_common STATIC
 target_include_directories(mpc_common PUBLIC src)
 target_link_libraries(mpc_common Threads::Threads)
 
+# === 🆕 KMS 라이브러리 ===
+add_library(mpc_kms STATIC
+    src/common/kms/src/LocalKMS.cpp
+    src/common/kms/src/AwsKMS.cpp
+    src/common/kms/src/AzureKMS.cpp
+    src/common/kms/src/IbmKMS.cpp
+    src/common/kms/src/GoogleKMS.cpp
+    src/common/kms/src/KMSFactory.cpp
+)
+
+target_include_directories(mpc_kms PUBLIC src)
+target_link_libraries(mpc_kms mpc_common)
+
 # === Coordinator-Node 프로토콜 ===
 add_library(coordinator_node_protocol STATIC
     src/coordinator/handlers/node/src/SigningProtocol.cpp
@@ -102,6 +115,7 @@ add_executable(node
 
 target_link_libraries(node
     node_server
+    mpc_kms  # ✅ 추가
 )
 
 # === Coordinator 실행 파일 ===
@@ -111,6 +125,7 @@ add_executable(coordinator
 
 target_link_libraries(coordinator
     coordinator_server
+    mpc_kms  # ✅ 추가
 )
 
 # === 테스트 (별도 파일) ===
@@ -126,6 +141,6 @@ install(TARGETS coordinator node DESTINATION bin)
 # === 빌드 정보 출력 ===
 message(STATUS "=== MPC Engine Build Configuration ===")
 message(STATUS "Building: coordinator and node executables")
-message(STATUS "Focus: TCP communication between coordinator and nodes")
+message(STATUS "KMS: Local (functional), AWS/Azure/IBM/Google (stubs)")
 message(STATUS "Build tests: ${BUILD_TESTS}")
 message(STATUS "=======================================")

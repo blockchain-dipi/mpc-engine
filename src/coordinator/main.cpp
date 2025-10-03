@@ -3,6 +3,8 @@
 #include "common/types/BasicTypes.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/config/EnvConfig.hpp"
+#include "common/kms/include/KMSFactory.hpp"
+#include "common/kms/include/KMSException.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include <iostream>
 #include <signal.h>
@@ -16,6 +18,7 @@
 using namespace mpc_engine::coordinator;
 using namespace mpc_engine::node;
 using namespace mpc_engine::config;
+using namespace mpc_engine::kms;
 using namespace mpc_engine::protocol::coordinator_node;
 
 // 전역 상태 관리
@@ -53,6 +56,7 @@ void PrintUsage(const char* program_name)
 
 void ValidateCoordinatorConfig(const EnvConfig& config) {
     std::vector<std::string> required_keys = {
+        "COORDINATOR_PLATFORM",
         "NODE_HOSTS",
         "NODE_IDS",
         "NODE_PLATFORMS",
@@ -108,6 +112,26 @@ int main(int argc, char* argv[])
     }
     
     try {
+        // 🆕 KMS 초기화
+        std::string platform = env_config.GetString("COORDINATOR_PLATFORM");
+        std::cout << "\n=== KMS Initialization ===" << std::endl;
+        std::cout << "Coordinator Platform: " << platform << std::endl;
+        
+        std::string kms_config_path;
+        if (platform == "LOCAL" || platform == "local") {
+            kms_config_path = env_config.GetString("COORDINATOR_LOCAL_KMS_PATH");
+        }
+        // 나중에 AWS, Azure 등 추가
+        
+        auto kms = KMSFactory::Create(platform, kms_config_path);
+        if (!kms->Initialize()) {
+            std::cerr << "Failed to initialize KMS" << std::endl;
+            return 1;
+        }
+        std::cout << "✓ KMS initialized successfully" << std::endl;
+        std::cout << std::endl;
+        
+        // 기존 Coordinator 초기화
         CoordinatorServer& coordinator = CoordinatorServer::Instance();
         g_coordinator = &coordinator;
         
@@ -140,12 +164,15 @@ int main(int argc, char* argv[])
         
         std::cout << "\nCoordinator configuration:" << std::endl;
         std::cout << "  Environment: " << env_type << std::endl;
+        std::cout << "  Platform: " << platform << std::endl;
         std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
         std::cout << "  Target Nodes:" << std::endl;
         for (size_t i = 0; i < node_endpoints.size(); ++i) {
             const auto& endpoint = node_endpoints[i];
             std::string node_id = (i < node_ids.size()) ? node_ids[i] : "node_" + std::to_string(i + 1);
-            std::cout << "    " << node_id << " - " << endpoint.first << ":" << endpoint.second << std::endl;
+            std::string node_platform = (i < platforms.size()) ? platforms[i] : "UNKNOWN";
+            std::cout << "    " << node_id << " (" << node_platform << ") - " 
+                      << endpoint.first << ":" << endpoint.second << std::endl;
         }
         std::cout << std::endl;
         
@@ -155,10 +182,10 @@ int main(int argc, char* argv[])
             const auto& endpoint = node_endpoints[i];
             
             std::string node_id = (i < node_ids.size()) ? node_ids[i] : "node_" + std::to_string(i + 1);
-            NodePlatformType platform = (i < platforms.size()) ? FromString(platforms[i]) : NodePlatformType::LOCAL;
+            NodePlatformType platform_type = (i < platforms.size()) ? FromString(platforms[i]) : NodePlatformType::LOCAL;
             uint32_t shard_index = (i < shard_indices.size()) ? shard_indices[i] : static_cast<uint32_t>(i);
             
-            if (coordinator.RegisterNode(node_id, platform, endpoint.first, endpoint.second, shard_index)) {
+            if (coordinator.RegisterNode(node_id, platform_type, endpoint.first, endpoint.second, shard_index)) {
                 std::cout << "  ✓ " << node_id << std::endl;
             }
         }
@@ -181,13 +208,14 @@ int main(int argc, char* argv[])
         std::cout << "========================================" << std::endl;
         std::cout << "  Coordinator Server Running" << std::endl;
         std::cout << "========================================" << std::endl;
+        std::cout << "  Platform: " << platform << std::endl;
         std::cout << "  Connected Nodes: " << connected_count << "/" << node_endpoints.size() << std::endl;
         std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
         std::cout << "========================================" << std::endl;
         std::cout << "Server is running. Press Ctrl+C to stop." << std::endl;
         std::cout << std::endl;
 
-        // 메인 루프: 조건 변수로 대기 (CPU 0%)
+        // 메인 루프
         {
             std::unique_lock<std::mutex> lock(g_shutdown_mutex);
             g_shutdown_cv.wait(lock, []{ 
@@ -197,6 +225,9 @@ int main(int argc, char* argv[])
         
     } catch (const ConfigMissingException& e) {
         std::cerr << "✗ Configuration error: " << e.what() << std::endl;
+        return 1;
+    } catch (const KMSException& e) {
+        std::cerr << "✗ KMS error: " << e.what() << std::endl;
         return 1;
     } catch (const std::exception& e) {
         std::cerr << "Coordinator error: " << e.what() << std::endl;

@@ -1,6 +1,8 @@
 // src/node/main.cpp
 #include "NodeServer.hpp"
 #include "common/config/EnvConfig.hpp"
+#include "common/kms/include/KMSFactory.hpp"
+#include "common/kms/include/KMSException.hpp"
 #include <iostream>
 #include <signal.h>
 #include <atomic>
@@ -9,6 +11,7 @@
 
 using namespace mpc_engine::node;
 using namespace mpc_engine::config;
+using namespace mpc_engine::kms;
 
 // 전역 상태 관리 (시그널 핸들러용)
 static NodeServer* g_node_server = nullptr;
@@ -88,23 +91,27 @@ int main(int argc, char* argv[]) {
         std::vector<std::string> required_keys = {
             "TRUSTED_COORDINATOR_IP",
             "NODE_IDS",
-            "NODE_HOSTS"
+            "NODE_HOSTS",
+            "NODE_PLATFORMS"
         };
         env_config.ValidateRequired(required_keys);
 
-        // ✅ Node ID로 설정 찾기
+        // Node ID로 설정 찾기
         std::vector<std::string> node_ids = env_config.GetStringArray("NODE_IDS");
         std::vector<std::pair<std::string, uint16_t>> node_hosts = env_config.GetNodeEndpoints("NODE_HOSTS");
+        std::vector<std::string> platforms = env_config.GetStringArray("NODE_PLATFORMS");
         
         std::string bind_address;
         uint16_t bind_port = 0;
+        std::string platform;
         bool found = false;
 
         for (size_t i = 0; i < node_ids.size(); ++i) {
             if (node_ids[i] == node_id) {
-                if (i < node_hosts.size()) {
+                if (i < node_hosts.size() && i < platforms.size()) {
                     bind_address = node_hosts[i].first;
                     bind_port = node_hosts[i].second;
+                    platform = platforms[i];
                     found = true;
                     break;
                 }
@@ -122,11 +129,30 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Node configuration:" << std::endl;
         std::cout << "  Node ID: " << node_id << std::endl;
+        std::cout << "  Platform: " << platform << std::endl;
         std::cout << "  Bind Address: " << bind_address << ":" << bind_port << std::endl;
         std::cout << std::endl;
 
+        // 🆕 KMS 초기화
+        std::cout << "=== KMS Initialization ===" << std::endl;
+        
+        std::string kms_config_path;
+        if (platform == "LOCAL" || platform == "local") {
+            kms_config_path = env_config.GetString("NODE_LOCAL_KMS_PATH");
+        }
+        // 나중에 AWS, Azure 등 추가
+        
+        auto kms = KMSFactory::Create(platform, kms_config_path);
+        if (!kms->Initialize()) {
+            std::cerr << "Failed to initialize KMS" << std::endl;
+            return 1;
+        }
+        std::cout << "✓ KMS initialized successfully" << std::endl;
+        std::cout << std::endl;
+
         // NodeServer 생성
-        NodeServer node_server(NodePlatformType::LOCAL);
+        NodePlatformType platform_type = FromString(platform);
+        NodeServer node_server(platform_type);
         g_node_server = &node_server;
 
         // 시그널 핸들러
@@ -138,7 +164,7 @@ int main(int argc, char* argv[]) {
         config.node_id = node_id;
         config.bind_address = bind_address;
         config.bind_port = bind_port;
-        config.platform_type = NodePlatformType::LOCAL;
+        config.platform_type = platform_type;
 
         node_server.SetNodeConfig(config);
 
@@ -192,6 +218,9 @@ int main(int argc, char* argv[]) {
     } catch (const ConfigMissingException& e) {
         std::cerr << "Configuration error: " << e.what() << std::endl;
         std::cerr << "\nPlease check your env/.env." << env_type << " file." << std::endl;
+        return 1;
+    } catch (const KMSException& e) {
+        std::cerr << "KMS error: " << e.what() << std::endl;
         return 1;
     } catch (const std::exception& e) {
         std::cerr << "Node server error: " << e.what() << std::endl;
