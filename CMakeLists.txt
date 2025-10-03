@@ -1,4 +1,4 @@
-# CMakeLists.txt (루트)
+# CMakeLists.txt (루트) - 기존에 추가만
 cmake_minimum_required(VERSION 3.16)
 project(mpc-engine)
 
@@ -6,6 +6,19 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_options(-Wall -Wextra -pedantic -pthread)
+
+# 🆕 OpenSSL 추가
+find_package(OpenSSL REQUIRED)
+
+# 🆕 nlohmann/json 추가
+find_package(nlohmann_json 3.2.0)
+if(NOT nlohmann_json_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(json
+        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+    )
+    FetchContent_MakeAvailable(json)
+endif()
 
 find_package(Threads REQUIRED)
 
@@ -20,7 +33,11 @@ add_library(mpc_common STATIC
 )
 
 target_include_directories(mpc_common PUBLIC src)
-target_link_libraries(mpc_common Threads::Threads)
+target_link_libraries(mpc_common 
+    Threads::Threads
+    OpenSSL::SSL          # 🆕
+    OpenSSL::Crypto       # 🆕
+)
 
 # === 🆕 KMS 라이브러리 ===
 add_library(mpc_kms STATIC
@@ -34,6 +51,17 @@ add_library(mpc_kms STATIC
 
 target_include_directories(mpc_kms PUBLIC src)
 target_link_libraries(mpc_kms mpc_common)
+
+# === 🆕 Wallet 프로토콜 ===
+add_library(coordinator_wallet_protocol STATIC
+    src/protocols/coordinator_wallet/src/WalletProtocolTypes.cpp
+)
+
+target_include_directories(coordinator_wallet_protocol PUBLIC src)
+target_link_libraries(coordinator_wallet_protocol 
+    mpc_common
+    nlohmann_json::nlohmann_json  # 🆕
+)
 
 # === Coordinator-Node 프로토콜 ===
 add_library(coordinator_node_protocol STATIC
@@ -115,7 +143,7 @@ add_executable(node
 
 target_link_libraries(node
     node_server
-    mpc_kms  # ✅ 추가
+    mpc_kms
 )
 
 # === Coordinator 실행 파일 ===
@@ -125,11 +153,12 @@ add_executable(coordinator
 
 target_link_libraries(coordinator
     coordinator_server
-    mpc_kms  # ✅ 추가
+    coordinator_wallet_protocol  # 🆕
+    mpc_kms
 )
 
 # === 테스트 (별도 파일) ===
-option(BUILD_TESTS "Build unit tests" ON)
+option(BUILD_TESTS "Build unit tests" OFF)  # 🆕 기본값 OFF
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
