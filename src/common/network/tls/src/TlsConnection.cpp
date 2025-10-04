@@ -486,7 +486,7 @@ namespace mpc_engine::network::tls
     std::string TlsConnection::GetSSLErrorString(int ssl_error) 
     {
         char buf[256];
-        ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
+        ERR_error_string_n(static_cast<unsigned long>(ssl_error), buf, sizeof(buf));
         return std::string(buf);
     }
 

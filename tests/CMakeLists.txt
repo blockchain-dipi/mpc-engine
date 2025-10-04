@@ -68,6 +68,23 @@ target_link_libraries(test_local_kms
 
 add_test(NAME LocalKMS COMMAND test_local_kms)
 
+# === HTTPS Library 기본 테스트 ===
+add_executable(test_https_library
+    unit/https/test_https_library.cpp
+)
+
+target_include_directories(test_https_library PRIVATE
+    ${TEST_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_https_library
+    mpc_common
+    Threads::Threads
+)
+
+add_test(NAME HttpsLibrary COMMAND test_https_library)
+
+
 # integration 테스트 ==========================================================================================
 # === Node TCP Server 테스트 ===
 add_executable(test_node_tcp_server
@@ -155,4 +172,5 @@ message(STATUS "  - test_node_tcp_server")
 message(STATUS "  - test_message_validation")
 message(STATUS "  - test_coordinator_node_basic")
 message(STATUS "  - test_local_kms")
+message(STATUS "  - test_https_library")
 message(STATUS "==========================")

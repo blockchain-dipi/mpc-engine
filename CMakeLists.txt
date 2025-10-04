@@ -30,13 +30,20 @@ add_library(mpc_common STATIC
     src/common/utils/firewall/KernelFirewall.cpp
     src/common/config/EnvConfig.cpp
     src/common/types/NodePlatformType.cpp
+    # 🆕 HTTPS 라이브러리 추가
+    src/common/https/src/HttpWriter.cpp
+    src/common/https/src/HttpsClient.cpp
+    src/common/https/src/HttpsConnectionPool.cpp
+    # 🆕 TLS 라이브러리 추가
+    src/common/network/tls/src/TlsContext.cpp
+    src/common/network/tls/src/TlsConnection.cpp
 )
 
 target_include_directories(mpc_common PUBLIC src)
 target_link_libraries(mpc_common 
     Threads::Threads
-    OpenSSL::SSL          # 🆕
-    OpenSSL::Crypto       # 🆕
+    OpenSSL::SSL
+    OpenSSL::Crypto
 )
 
 # === 🆕 KMS 라이브러리 ===
