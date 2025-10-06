@@ -39,6 +39,40 @@ namespace mpc_engine::coordinator
         return true;
     }
 
+    bool CoordinatorServer::InitializeWalletServer(
+        const std::string& wallet_url,
+        const std::string& auth_token,
+        const TlsContext& tls_ctx
+    ) {
+        std::cout << "[CoordinatorServer] Initializing Wallet Server..." << std::endl;
+
+        if (!wallet_manager_.Initialize(wallet_url, auth_token, tls_ctx)) {
+            std::cerr << "[CoordinatorServer] Failed to initialize Wallet Server" << std::endl;
+            return false;
+        }
+
+        std::cout << "[CoordinatorServer] Wallet Server initialized successfully" << std::endl;
+        return true;
+    }
+
+    std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
+    CoordinatorServer::SendToWallet(
+        const protocol::coordinator_wallet::WalletSigningRequest& request
+    ) {
+        if (!wallet_manager_.IsInitialized()) {
+            std::cerr << "[CoordinatorServer] Wallet Server not initialized" << std::endl;
+            return nullptr;
+        }
+
+        std::cout << "[CoordinatorServer] Sending request to Wallet Server..." << std::endl;
+        return wallet_manager_.SendSigningRequest(request);
+    }
+
+    bool CoordinatorServer::IsWalletServerInitialized() const 
+    {
+        return wallet_manager_.IsInitialized();
+    }
+
     bool CoordinatorServer::Start() 
     {
         if (!is_initialized.load() || is_running.load()) 

@@ -84,6 +84,11 @@ namespace mpc_engine::node
             return;
         }
 
+        if (tcp_server) {
+            std::cout << "\nInitiating graceful shutdown..." << std::endl;
+            tcp_server->PrepareShutdown(30000);  // 30초 타임아웃
+        }
+
         is_running = false;
 
         if (tcp_server) {

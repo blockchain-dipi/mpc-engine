@@ -10,19 +10,20 @@
 
 namespace mpc_engine::utils
 {
-    template<typename ContextType>
+    template<typename TContext>
     class ThreadPool 
     {
     private:
-        // 타입 안전한 Task
         struct Task 
         {
-            void (*func)(ContextType*);
-            ContextType* context;
+            void (*func)(TContext*);
+            TContext* context;
+            bool owned;  // ✅ 소유권 플래그
             
-            void operator()() const 
-            {
-                func(context);
+            ~Task() {
+                if (owned && context) {
+                    delete context;  // ✅ 자동 삭제
+                }
             }
         };
         
@@ -59,34 +60,64 @@ namespace mpc_engine::utils
         ThreadPool(ThreadPool&&) = delete;
         ThreadPool& operator=(ThreadPool&&) = delete;
 
-        // 작업 제출
-        void Submit(void (*func)(ContextType*), ContextType* context) 
+        /**
+         * @brief 작업 제출 (자동 삭제)
+         * 
+         * ThreadPool이 context를 소유하고 작업 완료 후 자동 삭제합니다.
+         * 
+         * @param func 작업 함수
+         * @param context unique_ptr (소유권 이전)
+         */
+        void SubmitOwned(void (*func)(TContext*), std::unique_ptr<TContext> context) 
+        {
+            TContext* raw_ptr = context.release();
+            
+            if (stop) {
+                delete raw_ptr;
+                throw std::runtime_error("ThreadPool is stopped");
+            }
+        
+            Task task{func, raw_ptr, true};
+            
+            QueueResult result = task_queue.Push(std::move(task));
+            
+            if (result != QueueResult::SUCCESS) {
+                delete raw_ptr;
+                throw std::runtime_error("Failed to push task");
+            }
+        }
+    
+        /**
+         * @brief 작업 제출 (빌려줌)
+         * 
+         * ThreadPool은 context를 삭제하지 않습니다.
+         * 
+         * @param func 작업 함수
+         * @param context raw pointer (호출자가 생명주기 관리)
+         */
+        void SubmitBorrowed(void (*func)(TContext*), TContext* context) 
         {
             if (stop) {
                 throw std::runtime_error("ThreadPool is stopped");
             }
-
-            // 🆕 QueueResult 확인
-            QueueResult result = task_queue.Push(Task{func, context});
+        
+            Task task{func, context, false};
             
-            if (result == QueueResult::SHUTDOWN) {
-                throw std::runtime_error("ThreadPool queue is shutdown");
-            } else if (result != QueueResult::SUCCESS) {
-                throw std::runtime_error("Failed to push task: " + std::string(ToString(result)));
+            QueueResult result = task_queue.Push(std::move(task));
+            
+            if (result != QueueResult::SUCCESS) {
+                throw std::runtime_error("Failed to push task");
             }
         }
 
-        // Graceful shutdown
         void Shutdown() 
         {
             if (stop.exchange(true)) {
-                return;  // 이미 종료 중
+                return;
             }
             
-            // Queue 종료 (대기 중인 워커들 깨우기)
             task_queue.Shutdown();
             
-            // 모든 워커 종료 대기
             for (auto& worker : workers) {
                 if (worker.joinable()) {
                     worker.join();
@@ -94,29 +125,10 @@ namespace mpc_engine::utils
             }
         }
 
-        // 현재 활성 작업 수
-        size_t GetActiveTaskCount() const 
-        {
-            return active_tasks.load();
-        }
-
-        // 대기 중인 작업 수
-        size_t GetPendingTaskCount() const 
-        {
-            return task_queue.Size();
-        }
-
-        // 워커 스레드 수
-        size_t GetThreadCount() const 
-        {
-            return num_threads;
-        }
-
-        // 종료 상태 확인
-        bool IsStopped() const 
-        {
-            return stop.load();
-        }
+        size_t GetActiveTaskCount() const { return active_tasks.load(); }
+        size_t GetPendingTaskCount() const { return task_queue.Size(); }
+        size_t GetThreadCount() const { return num_threads; }
+        bool IsStopped() const { return stop.load(); }
 
     private:
         void WorkerLoop(size_t worker_id) 
@@ -124,16 +136,13 @@ namespace mpc_engine::utils
             while (!stop) {
                 Task task;
 
-                // 🆕 QueueResult 사용
                 QueueResult result = task_queue.Pop(task);
                 
                 if (result == QueueResult::SHUTDOWN) {
-                    // Shutdown 시그널
                     break;
                 }
                 
                 if (result != QueueResult::SUCCESS) {
-                    // 예상치 못한 에러
                     fprintf(stderr, "[ThreadPool Worker %zu] Unexpected pop result: %s\n", 
                             worker_id, ToString(result));
                     break;
@@ -142,10 +151,8 @@ namespace mpc_engine::utils
                 active_tasks++;
                 
                 try {
-                    // 직접 함수 포인터 호출
                     task.func(task.context);
                 } catch (const std::exception& e) {
-                    // 예외 로깅
                     fprintf(stderr, "[ThreadPool Worker %zu] Exception: %s\n", 
                             worker_id, e.what());
                 } catch (...) {
@@ -154,6 +161,9 @@ namespace mpc_engine::utils
                 }
                 
                 active_tasks--;
+                
+                // ✅ task가 스코프 벗어나며 Task::~Task() 호출
+                //    owned == true면 자동으로 context 삭제
             }
         }
     };

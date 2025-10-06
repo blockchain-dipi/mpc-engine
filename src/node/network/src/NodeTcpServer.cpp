@@ -99,6 +99,7 @@ namespace mpc_engine::node::network
         }
 
         is_running = true;
+        accepting_connections = true;
         
         // Start Connection threads
         connection_thread = std::thread(&NodeTcpServer::ConnectionLoop, this);
@@ -118,6 +119,7 @@ namespace mpc_engine::node::network
 
         // 🔹 1단계: 서버 소켓 종료 (accept 차단)
         if (server_socket != INVALID_SOCKET_VALUE) {
+            shutdown(server_socket, SHUT_RDWR);
             utils::CloseSocket(server_socket);
             server_socket = INVALID_SOCKET_VALUE;
         }
@@ -182,6 +184,69 @@ namespace mpc_engine::node::network
         std::cout << "NodeTcpServer stopped" << std::endl;
     }
 
+    bool NodeTcpServer::PrepareShutdown(uint32_t timeout_ms) 
+    {
+        std::cout << "\n========================================" << std::endl;
+        std::cout << "  Preparing Graceful Shutdown" << std::endl;
+        std::cout << "========================================" << std::endl;
+
+        std::cout << "[1/3] Stopping new connections..." << std::endl;
+        StopAcceptingConnections();
+        std::cout << "  ✓ No longer accepting new connections" << std::endl;
+
+        std::cout << "[2/3] Waiting for pending requests..." << std::endl;
+        auto start = std::chrono::steady_clock::now();
+        bool completed = false;
+
+        while (true) {
+            uint32_t pending = GetPendingRequests();
+            if (pending == 0) {
+                std::cout << "  ✓ All requests completed" << std::endl;
+                completed = true;
+                break;
+            }
+
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start
+            ).count();
+
+            if (elapsed > timeout_ms) {
+                std::cout << "  ⚠ Timeout: " << pending << " requests pending" << std::endl;
+                break;
+            }
+
+            std::cout << "  Pending: " << pending << " (" << elapsed << "ms)" << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+
+        std::cout << "[3/3] Additional cleanup..." << std::endl;
+        // TODO: 나중에 여기에 DB 커밋, 로그 플러시 등 추가
+        std::cout << "  ✓ Cleanup complete" << std::endl;
+
+        std::cout << "========================================" << std::endl;
+        std::cout << (completed ? "  ✓ Ready for shutdown" : "  ⚠ Forced shutdown") << std::endl;
+        std::cout << "========================================\n" << std::endl;
+
+        return completed;
+    }
+
+    void NodeTcpServer::StopAcceptingConnections() 
+    {
+        accepting_connections = false;
+    }
+
+    uint32_t NodeTcpServer::GetPendingRequests() const 
+    {
+        uint32_t pending = 0;
+        if (handler_pool) {
+            pending += handler_pool->GetActiveTaskCount();
+        }
+        if (send_queue) {
+            pending += send_queue->Size();
+        }
+        return pending;
+    }
+
     void NodeTcpServer::ConnectionLoop() 
     {
         std::cout << "Connection thread started" << std::endl;
@@ -192,6 +257,11 @@ namespace mpc_engine::node::network
         }
         
         while (is_running.load()) {
+            if (!accepting_connections.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            }
+
             sockaddr_in client_addr{};
             socklen_t addr_len = sizeof(client_addr);
             
@@ -316,13 +386,19 @@ namespace mpc_engine::node::network
                 }
             }
         
-            auto* context = new HandlerContext(request, message_handler, send_queue.get());
+            // ✅ unique_ptr로 생성
+            auto context = std::make_unique<HandlerContext>(
+                request, 
+                message_handler, 
+                send_queue.get()
+            );
             
             try {
-                handler_pool->Submit(ProcessMessage, context);
+                // ✅ SubmitOwned로 소유권 이전
+                handler_pool->SubmitOwned(ProcessMessage, std::move(context));
                 
             } catch (const std::runtime_error& e) {
-                // ThreadPool stopped
+                // ✅ context는 이미 move됨 → 메모리 누수 없음
                 std::cerr << "[ERROR] Failed to submit task (pool stopped): " << e.what() << std::endl;
                 
                 NetworkMessage error_response = CreateErrorResponse(
@@ -330,7 +406,6 @@ namespace mpc_engine::node::network
                     "Server shutting down"
                 );
                 
-                // 🆕 QueueResult 사용
                 utils::QueueResult result = send_queue->TryPush(
                     error_response, 
                     std::chrono::milliseconds(100)
@@ -341,10 +416,10 @@ namespace mpc_engine::node::network
                               << utils::ToString(result) << std::endl;
                 }
                 
-                delete context;
                 break;
                 
             } catch (const std::exception& e) {
+                // ✅ context는 이미 move됨 → 메모리 누수 없음
                 std::cerr << "[ERROR] Failed to submit task: " << e.what() << std::endl;
                 
                 NetworkMessage error_response = CreateErrorResponse(
@@ -352,7 +427,6 @@ namespace mpc_engine::node::network
                     "Server busy"
                 );
                 
-                // 🆕 QueueResult 사용
                 utils::QueueResult result = send_queue->TryPush(
                     error_response, 
                     std::chrono::milliseconds(100)
@@ -363,7 +437,6 @@ namespace mpc_engine::node::network
                               << utils::ToString(result) << std::endl;
                 }
                 
-                delete context;
                 handler_errors++;
             }
         }

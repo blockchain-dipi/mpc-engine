@@ -80,6 +80,9 @@ namespace mpc_engine::node::network
         // Kernel firewall
         bool enable_kernel_firewall = false;
 
+        // 새 연결 수락 제어
+        std::atomic<bool> accepting_connections{true};
+
     public:
         NodeTcpServer(const std::string& address, uint16_t port, size_t handler_threads = 4);
         ~NodeTcpServer();
@@ -88,6 +91,10 @@ namespace mpc_engine::node::network
         bool Start();
         void Stop();
         bool IsRunning() const;
+
+        bool PrepareShutdown(uint32_t timeout_ms = 30000);    
+        void StopAcceptingConnections();
+        uint32_t GetPendingRequests() const;
 
         void SetMessageHandler(MessageHandler handler);
         void SetConnectedHandler(ConnectionHandler handler);

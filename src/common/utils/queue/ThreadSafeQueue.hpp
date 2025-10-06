@@ -31,11 +31,11 @@ namespace mpc_engine::utils
         }
     }
 
-    template<typename T>
+    template<typename TElement>
     class ThreadSafeQueue 
     {
     private:
-        std::queue<T> queue;
+        std::queue<TElement> queue;
         mutable std::mutex mutex;
         std::condition_variable cv_not_empty;
         std::condition_variable cv_not_full;
@@ -60,7 +60,7 @@ namespace mpc_engine::utils
         ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
 
         // 🆕 Push: Queue에 아이템 추가 (Queue가 가득 차면 대기)
-        QueueResult Push(T item) 
+        QueueResult Push(TElement item) 
         {
             std::unique_lock<std::mutex> lock(mutex);
 
@@ -79,7 +79,7 @@ namespace mpc_engine::utils
         }
 
         // 🆕 TryPush: 타임아웃과 함께 Push 시도
-        QueueResult TryPush(T item, std::chrono::milliseconds timeout) 
+        QueueResult TryPush(TElement item, std::chrono::milliseconds timeout) 
         {
             std::unique_lock<std::mutex> lock(mutex);
 
@@ -99,7 +99,7 @@ namespace mpc_engine::utils
         }
 
         // 🆕 Pop: Queue에서 아이템 꺼내기 (Queue가 비어있으면 대기)
-        QueueResult Pop(T& item) 
+        QueueResult Pop(TElement& item) 
         {
             std::unique_lock<std::mutex> lock(mutex);
 
@@ -119,7 +119,7 @@ namespace mpc_engine::utils
         }
 
         // 🆕 TryPop: 타임아웃과 함께 Pop 시도
-        QueueResult TryPop(T& item, std::chrono::milliseconds timeout) 
+        QueueResult TryPop(TElement& item, std::chrono::milliseconds timeout) 
         {
             std::unique_lock<std::mutex> lock(mutex);
 
@@ -181,7 +181,7 @@ namespace mpc_engine::utils
         void Clear() 
         {
             std::lock_guard<std::mutex> lock(mutex);
-            std::queue<T> empty_queue;
+            std::queue<TElement> empty_queue;
             std::swap(queue, empty_queue);
             cv_not_full.notify_all();
         }

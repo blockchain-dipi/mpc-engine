@@ -84,6 +84,25 @@ target_link_libraries(test_https_library
 
 add_test(NAME HttpsLibrary COMMAND test_https_library)
 
+# === Wallet Components Unit Test ===
+add_executable(test_wallet_components
+    unit/wallet/test_wallet_components.cpp
+)
+
+target_include_directories(test_wallet_components PRIVATE
+    ${TEST_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_wallet_components
+    coordinator_wallet_network
+    coordinator_wallet_handlers
+    coordinator_wallet_protocol
+    mpc_common
+    nlohmann_json::nlohmann_json
+    Threads::Threads
+)
+
+add_test(NAME WalletComponents COMMAND test_wallet_components)
 
 # integration 테스트 ==========================================================================================
 # === Node TCP Server 테스트 ===
@@ -162,6 +181,29 @@ target_link_libraries(test_coordinator_with_real_nodes
 # add_test(NAME CoordinatorWithRealNodes COMMAND test_coordinator_with_real_nodes)
 message(STATUS "  - test_coordinator_with_real_nodes (manual)")
 
+# === MPC Engine Full Integration Test ===
+add_executable(test_mpc_engine_full
+    integration/test_mpc_engine_full.cpp
+)
+
+target_include_directories(test_mpc_engine_full PRIVATE
+    ${TEST_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_mpc_engine_full
+    coordinator_server
+    node_server
+    coordinator_node_network
+    node_network
+    node_handlers
+    coordinator_node_protocol
+    mpc_common
+    Threads::Threads
+)
+
+add_test(NAME MpcEngineFull COMMAND test_mpc_engine_full)
+
+# =======================================================================================================
 # === 테스트 빌드 정보 ===
 message(STATUS "=== Test Configuration ===")
 message(STATUS "Test executables:")

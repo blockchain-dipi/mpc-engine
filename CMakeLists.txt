@@ -1,4 +1,4 @@
-# CMakeLists.txt (루트) - 기존에 추가만
+# CMakeLists.txt (루트)
 cmake_minimum_required(VERSION 3.16)
 project(mpc-engine)
 
@@ -59,7 +59,7 @@ add_library(mpc_kms STATIC
 target_include_directories(mpc_kms PUBLIC src)
 target_link_libraries(mpc_kms mpc_common)
 
-# === 🆕 Wallet 프로토콜 ===
+# === Wallet 프로토콜 ===
 add_library(coordinator_wallet_protocol STATIC
     src/protocols/coordinator_wallet/src/WalletProtocolTypes.cpp
 )
@@ -67,7 +67,7 @@ add_library(coordinator_wallet_protocol STATIC
 target_include_directories(coordinator_wallet_protocol PUBLIC src)
 target_link_libraries(coordinator_wallet_protocol 
     mpc_common
-    nlohmann_json::nlohmann_json  # 🆕
+    nlohmann_json::nlohmann_json
 )
 
 # === Coordinator-Node 프로토콜 ===
@@ -77,6 +77,18 @@ add_library(coordinator_node_protocol STATIC
 
 target_include_directories(coordinator_node_protocol PUBLIC src)
 target_link_libraries(coordinator_node_protocol mpc_common)
+
+# === Coordinator Wallet 핸들러 ===
+add_library(coordinator_wallet_handlers STATIC
+    src/coordinator/handlers/wallet/src/WalletSigningProtocol.cpp
+)
+
+target_include_directories(coordinator_wallet_handlers PUBLIC src)
+target_link_libraries(coordinator_wallet_handlers
+    coordinator_wallet_protocol
+    mpc_common
+    nlohmann_json::nlohmann_json
+)
 
 # === Node 핸들러 ===
 add_library(node_handlers STATIC
@@ -116,6 +128,24 @@ target_link_libraries(coordinator_node_network
     Threads::Threads
 )
 
+# === Coordinator Wallet 네트워크 ===
+add_library(coordinator_wallet_network STATIC
+    src/coordinator/network/wallet_server/src/WalletConnectionInfo.cpp
+    src/coordinator/network/wallet_server/src/WalletProtocolRouter.cpp
+    src/coordinator/network/wallet_server/src/WalletServerManager.cpp
+)
+
+target_include_directories(coordinator_wallet_network PUBLIC src)
+target_link_libraries(coordinator_wallet_network
+    mpc_common
+    coordinator_wallet_protocol
+    coordinator_wallet_handlers
+    nlohmann_json::nlohmann_json
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    Threads::Threads
+)
+
 # === Node 서버 라이브러리 ===
 add_library(node_server STATIC
     src/node/NodeServer.cpp
@@ -138,7 +168,9 @@ add_library(coordinator_server STATIC
 target_include_directories(coordinator_server PUBLIC src)
 target_link_libraries(coordinator_server
     coordinator_node_network
+    coordinator_wallet_network
     coordinator_node_protocol
+    coordinator_wallet_protocol
     mpc_common
     Threads::Threads
 )
@@ -160,12 +192,12 @@ add_executable(coordinator
 
 target_link_libraries(coordinator
     coordinator_server
-    coordinator_wallet_protocol  # 🆕
+    coordinator_wallet_protocol
     mpc_kms
 )
 
 # === 테스트 (별도 파일) ===
-option(BUILD_TESTS "Build unit tests" OFF)  # 🆕 기본값 OFF
+option(BUILD_TESTS "Build unit tests" OFF)
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
@@ -178,5 +210,6 @@ install(TARGETS coordinator node DESTINATION bin)
 message(STATUS "=== MPC Engine Build Configuration ===")
 message(STATUS "Building: coordinator and node executables")
 message(STATUS "KMS: Local (functional), AWS/Azure/IBM/Google (stubs)")
+message(STATUS "Wallet Network: HTTPS + Connection Pool")
 message(STATUS "Build tests: ${BUILD_TESTS}")
 message(STATUS "=======================================")

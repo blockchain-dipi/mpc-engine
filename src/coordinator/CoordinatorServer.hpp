@@ -1,7 +1,9 @@
 // src/coordinator/CoordinatorServer.hpp
 #pragma once
 #include "coordinator/network/node_client/include/NodeTcpClient.hpp"
+#include "coordinator/network/wallet_server/include/WalletServerManager.hpp"
 #include "protocols/coordinator_node/include/MessageTypes.hpp"
+#include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -12,6 +14,7 @@
 namespace mpc_engine::coordinator
 {
     using namespace protocol::coordinator_node;
+    using namespace mpc_engine::network::tls;
 
     struct CoordinatorStats 
     {
@@ -26,8 +29,12 @@ namespace mpc_engine::coordinator
     class CoordinatorServer 
     {
     private:
+        // Node 클라이언트 관리
         std::unordered_map<std::string, std::unique_ptr<network::NodeTcpClient>> node_clients;
         mutable std::mutex nodes_mutex;
+
+        // Wallet Server Manager (Singleton 참조)
+        network::WalletServerManager& wallet_manager_ = network::WalletServerManager::Instance();
 
         std::atomic<bool> is_running{false};
         std::atomic<bool> is_initialized{false};
@@ -84,8 +91,36 @@ namespace mpc_engine::coordinator
         std::vector<std::string> GetNodesByStatus(ConnectionStatus status) const;
         std::vector<std::string> GetNodesByShardIndex(uint32_t shard_index) const;
 
+        /**
+         * @brief Wallet Server 초기화
+         * 
+         * @param wallet_url Wallet Server URL
+         * @param auth_token Authorization token
+         * @param tls_ctx TLS Context (KMS에서 CA 로드 완료)
+         * @return 성공 여부
+         */
+        bool InitializeWalletServer(
+            const std::string& wallet_url,
+            const std::string& auth_token,
+            const TlsContext& tls_ctx
+        );
+
+        /**
+         * @brief Wallet에 서명 요청 전송
+         * 
+         * @param request WalletSigningRequest
+         * @return WalletSigningResponse (실패 시 nullptr)
+         */
+        std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
+        SendToWallet(const protocol::coordinator_wallet::WalletSigningRequest& request);
+
+        /**
+         * @brief Wallet Server 초기화 여부
+         */
+        bool IsWalletServerInitialized() const;
+
     private:
         network::NodeTcpClient* FindNodeClientInternal(const std::string& node_id) const;
         void OnNodeStatusChanged(const std::string& node_id, ConnectionStatus status);
     };
-}
+} // namespace mpc_engine::coordinator

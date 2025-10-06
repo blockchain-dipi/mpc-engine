@@ -83,18 +83,18 @@ namespace mpc_engine::utils
      * 2. wake_condition을 notify (optional)
      * 3. 타임아웃과 함께 join
      */
-    template<typename StopFlag, typename WakeCondition = void*>
+    template<typename TStopFlag, typename TWakeCondition = void*>
     inline JoinResult SafeStopThread(
         std::thread& thread,
-        StopFlag& stop_flag,
+        TStopFlag& stop_flag,
         uint32_t timeout_ms,
-        WakeCondition* wake_condition = nullptr
+        TWakeCondition* wake_condition = nullptr
     ) {
         // 1. 종료 플래그 설정
         stop_flag.store(true);
         
         // 2. 대기 중인 스레드 깨우기 (optional)
-        if constexpr (!std::is_same_v<WakeCondition, void*>) {
+        if constexpr (!std::is_same_v<TWakeCondition, void*>) {
             if (wake_condition) {
                 wake_condition->notify_all();
             }

@@ -35,8 +35,8 @@ void exception_task([[maybe_unused]] SimpleContext* ctx) {
 }
 
 // 테스트 유틸리티
-template<typename Func>
-void run_test(const char* name, Func test) {
+template<typename TFunc>
+void run_test(const char* name, TFunc test) {
     try {
         test();
         std::cout << "[PASS] " << name << std::endl;
@@ -49,14 +49,14 @@ int main() {
     std::cout << "=== ThreadPool Unit Tests ===" << std::endl;
     std::cout << std::endl;
 
-    // Test 1: 기본 Submit
-    run_test("Basic Submit", []() {
+    // Test 1: SubmitBorrowed (스택 변수)
+    run_test("SubmitBorrowed (Stack Variable)", []() {
         ThreadPool<SimpleContext> pool(4);
         
         std::atomic<int> counter{0};
         SimpleContext ctx{10, &counter};
         
-        pool.Submit(simple_task, &ctx);
+        pool.SubmitBorrowed(simple_task, &ctx);
         
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
@@ -65,18 +65,17 @@ int main() {
         }
     });
 
-    // Test 2: 다중 작업
-    run_test("Multiple Tasks", []() {
+    // Test 2: SubmitOwned (동적 할당)
+    run_test("SubmitOwned (Dynamic Allocation)", []() {
         ThreadPool<SimpleContext> pool(4);
         
         std::atomic<int> counter{0};
         
         for (int i = 0; i < 100; ++i) {
-            SimpleContext* ctx = new SimpleContext{1, &counter};
-            pool.Submit([](SimpleContext* c) {
+            auto ctx = std::make_unique<SimpleContext>(SimpleContext{1, &counter});
+            pool.SubmitOwned([](SimpleContext* c) {
                 c->counter->fetch_add(c->value);
-                delete c;
-            }, ctx);
+            }, std::move(ctx));
         }
         
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -98,12 +97,11 @@ int main() {
         auto start = std::chrono::steady_clock::now();
         
         for (size_t i = 0; i < flags.size(); ++i) {
-            ComplexContext* ctx = new ComplexContext{"", {}, &flags[i]};
-            pool.Submit([](ComplexContext* c) {
+            auto ctx = std::make_unique<ComplexContext>(ComplexContext{"", {}, &flags[i]});
+            pool.SubmitOwned([](ComplexContext* c) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 c->completed->store(true);
-                delete c;
-            }, ctx);
+            }, std::move(ctx));
         }
         
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -127,14 +125,14 @@ int main() {
         std::atomic<int> counter{0};
         SimpleContext ctx{0, &counter};
         
-        // 예외 발생 작업 제출
-        pool.Submit(exception_task, &ctx);
+        // 예외 발생 작업 제출 (스택 변수)
+        pool.SubmitBorrowed(exception_task, &ctx);
         
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
         // 정상 작업이 계속 실행되는지 확인
         SimpleContext ctx2{1, &counter};
-        pool.Submit(simple_task, &ctx2);
+        pool.SubmitBorrowed(simple_task, &ctx2);
         
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
@@ -151,12 +149,11 @@ int main() {
         
         // 많은 작업 제출
         for (int i = 0; i < 20; ++i) {
-            SimpleContext* ctx = new SimpleContext{1, &counter};
-            pool.Submit([](SimpleContext* c) {
+            auto ctx = std::make_unique<SimpleContext>(SimpleContext{1, &counter});
+            pool.SubmitOwned([](SimpleContext* c) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 c->counter->fetch_add(c->value);
-                delete c;
-            }, ctx);
+            }, std::move(ctx));
         }
         
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -168,7 +165,7 @@ int main() {
         // Shutdown 후 Submit 시도
         try {
             SimpleContext ctx{1, &counter};
-            pool.Submit(simple_task, &ctx);
+            pool.SubmitBorrowed(simple_task, &ctx);
             throw std::runtime_error("Should have thrown exception");
         } catch (const std::runtime_error& e) {
             std::string msg = e.what();
@@ -190,12 +187,11 @@ int main() {
         
         // 느린 작업 제출
         for (int i = 0; i < 10; ++i) {
-            SimpleContext* ctx = new SimpleContext{1, &counter};
-            pool.Submit([](SimpleContext* c) {
+            auto ctx = std::make_unique<SimpleContext>(SimpleContext{1, &counter});
+            pool.SubmitOwned([](SimpleContext* c) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 c->counter->fetch_add(c->value);
-                delete c;
-            }, ctx);
+            }, std::move(ctx));
         }
         
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -208,8 +204,8 @@ int main() {
         }
     });
 
-    // Test 7: 다른 타입의 ThreadPool
-    run_test("Multiple Pool Types", []() {
+    // Test 7: 다른 타입의 ThreadPool (SubmitBorrowed)
+    run_test("Multiple Pool Types (Borrowed)", []() {
         ThreadPool<SimpleContext> simple_pool(2);
         ThreadPool<ComplexContext> complex_pool(4);
         
@@ -219,13 +215,35 @@ int main() {
         SimpleContext simple_ctx{5, &simple_counter};
         ComplexContext complex_ctx{"test", {1,2,3}, &complex_flag};
         
-        simple_pool.Submit(simple_task, &simple_ctx);
-        complex_pool.Submit(complex_task, &complex_ctx);
+        simple_pool.SubmitBorrowed(simple_task, &simple_ctx);
+        complex_pool.SubmitBorrowed(complex_task, &complex_ctx);
         
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         
         if (simple_counter.load() != 5 || !complex_flag.load()) {
             throw std::runtime_error("Pool type mismatch");
+        }
+    });
+
+    // Test 8: SubmitOwned vs SubmitBorrowed 혼합
+    run_test("Mixed Owned and Borrowed", []() {
+        ThreadPool<SimpleContext> pool(4);
+        std::atomic<int> counter{0};
+        
+        // 스택 변수 (Borrowed)
+        SimpleContext stack_ctx{10, &counter};
+        pool.SubmitBorrowed(simple_task, &stack_ctx);
+        
+        // 동적 할당 (Owned)
+        for (int i = 0; i < 5; ++i) {
+            auto ctx = std::make_unique<SimpleContext>(SimpleContext{1, &counter});
+            pool.SubmitOwned(simple_task, std::move(ctx));
+        }
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
+        if (counter.load() != 15) {
+            throw std::runtime_error("Counter mismatch: " + std::to_string(counter.load()));
         }
     });
 
@@ -240,11 +258,10 @@ int main() {
         auto start = std::chrono::steady_clock::now();
         
         for (int i = 0; i < num_tasks; ++i) {
-            SimpleContext* ctx = new SimpleContext{1, &counter};
-            pool.Submit([](SimpleContext* c) {
+            auto ctx = std::make_unique<SimpleContext>(SimpleContext{1, &counter});
+            pool.SubmitOwned([](SimpleContext* c) {
                 c->counter->fetch_add(c->value);
-                delete c;
-            }, ctx);
+            }, std::move(ctx));
         }
         
         pool.Shutdown();
