@@ -1,6 +1,6 @@
 // src/node/main.cpp
 #include "NodeServer.hpp"
-#include "common/config/EnvConfig.hpp"
+#include "common/config/ConfigManager.hpp"
 #include "common/kms/include/KMSFactory.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include <iostream>
@@ -80,8 +80,7 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
 
     // 환경 설정 로드
-    EnvConfig env_config;
-    if (!env_config.LoadFromEnv(env_type)) {
+    if (!ConfigManager::Instance().Initialize(env_type)) {
         std::cerr << "Failed to load environment: " << env_type << std::endl;
         return 1;
     }
@@ -94,12 +93,12 @@ int main(int argc, char* argv[]) {
             "NODE_HOSTS",
             "NODE_PLATFORMS"
         };
-        env_config.ValidateRequired(required_keys);
+        Config::ValidateRequired(required_keys);
 
         // Node ID로 설정 찾기
-        std::vector<std::string> node_ids = env_config.GetStringArray("NODE_IDS");
-        std::vector<std::pair<std::string, uint16_t>> node_hosts = env_config.GetNodeEndpoints("NODE_HOSTS");
-        std::vector<std::string> platforms = env_config.GetStringArray("NODE_PLATFORMS");
+        std::vector<std::string> node_ids = Config::GetStringArray("NODE_IDS");
+        std::vector<std::pair<std::string, uint16_t>> node_hosts = Config::GetNodeEndpoints("NODE_HOSTS");
+        std::vector<std::string> platforms = Config::GetStringArray("NODE_PLATFORMS");
         
         std::string bind_address;
         uint16_t bind_port = 0;
@@ -138,7 +137,7 @@ int main(int argc, char* argv[]) {
         
         std::string kms_config_path;
         if (platform == "LOCAL" || platform == "local") {
-            kms_config_path = env_config.GetString("NODE_LOCAL_KMS_PATH");
+            kms_config_path = Config::GetString("NODE_LOCAL_KMS_PATH");
         }
         // 나중에 AWS, Azure 등 추가
         
@@ -177,12 +176,10 @@ int main(int argc, char* argv[]) {
         // 보안 설정
         network::NodeTcpServer* tcp_server = node_server.GetTcpServer();
         if (tcp_server) {
-            std::string trusted_ip = env_config.GetString("TRUSTED_COORDINATOR_IP");
+            std::string trusted_ip = Config::GetString("TRUSTED_COORDINATOR_IP");
             tcp_server->SetTrustedCoordinator(trusted_ip);
-            
-            bool enable_firewall = env_config.HasKey("ENABLE_KERNEL_FIREWALL") 
-                                    ? env_config.GetBool("ENABLE_KERNEL_FIREWALL") 
-                                    : false;
+
+            bool enable_firewall = Config::HasKey("ENABLE_KERNEL_FIREWALL") ? Config::GetBool("ENABLE_KERNEL_FIREWALL") : false;
             tcp_server->EnableKernelFirewall(enable_firewall);
         }
 
@@ -199,7 +196,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  Node ID: " << node_server.GetNodeId() << std::endl;
         std::cout << "  Platform: " << ToString(node_server.GetPlatformType()) << std::endl;
         std::cout << "  Listening: " << config.bind_address << ":" << config.bind_port << std::endl;
-        std::cout << "  Trusted Coordinator: " << env_config.GetString("TRUSTED_COORDINATOR_IP") << std::endl;
+        std::cout << "  Trusted Coordinator: " << Config::GetString("TRUSTED_COORDINATOR_IP") << std::endl;
         if (tcp_server) {
             std::cout << "  Kernel Firewall: " << (tcp_server->IsKernelFirewallEnabled() ? "ENABLED" : "DISABLED") << std::endl;
         }

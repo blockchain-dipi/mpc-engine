@@ -29,12 +29,13 @@ add_library(mpc_common STATIC
     src/common/utils/socket/SocketUtils.cpp
     src/common/utils/firewall/KernelFirewall.cpp
     src/common/config/EnvConfig.cpp
+    src/common/config/ConfigManager.cpp
     src/common/types/NodePlatformType.cpp
-    # 🆕 HTTPS 라이브러리 추가
+    # HTTPS 라이브러리 추가
     src/common/https/src/HttpWriter.cpp
     src/common/https/src/HttpsClient.cpp
     src/common/https/src/HttpsConnectionPool.cpp
-    # 🆕 TLS 라이브러리 추가
+    # TLS 라이브러리 추가
     src/common/network/tls/src/TlsContext.cpp
     src/common/network/tls/src/TlsConnection.cpp
 )

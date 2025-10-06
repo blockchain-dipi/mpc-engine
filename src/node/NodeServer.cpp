@@ -1,5 +1,6 @@
 // src/node/NodeServer.cpp
 #include "node/NodeServer.hpp"
+#include "common/config/ConfigManager.hpp"
 #include "node/handlers/include/NodeProtocolRouter.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
@@ -7,6 +8,8 @@
 
 namespace mpc_engine::node
 {
+    using namespace mpc_engine::config;
+    
     std::string ToString(NodePlatformType type) {
         switch (type) {
             case NodePlatformType::LOCAL: return "LOCAL";
@@ -51,7 +54,8 @@ namespace mpc_engine::node
             return false;
         }
 
-        tcp_server = std::make_unique<network::NodeTcpServer>(node_config.bind_address, node_config.bind_port);
+        uint16_t handler_threads = Config::GetUInt16("NODE_HANDLER_THREADS");
+        tcp_server = std::make_unique<network::NodeTcpServer>(node_config.bind_address, node_config.bind_port, handler_threads);
 
         if (!tcp_server->Initialize()) {
             return false;

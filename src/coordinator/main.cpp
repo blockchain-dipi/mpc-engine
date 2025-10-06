@@ -1,8 +1,8 @@
 // src/coordinator/main.cpp
 #include "CoordinatorServer.hpp"
+#include "common/config/ConfigManager.hpp"
 #include "common/types/BasicTypes.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
-#include "common/config/EnvConfig.hpp"
 #include "common/kms/include/KMSFactory.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
@@ -56,25 +56,6 @@ void PrintUsage(const char* program_name)
     std::cout << "  production  Production environment" << std::endl;
 }
 
-void ValidateCoordinatorConfig(const EnvConfig& config) 
-{
-    std::vector<std::string> required_keys = {
-        "COORDINATOR_PLATFORM",
-        "NODE_HOSTS",
-        "NODE_IDS",
-        "NODE_PLATFORMS",
-        "NODE_SHARD_INDICES",
-        "MPC_THRESHOLD",
-        "MPC_TOTAL_SHARDS",
-        "WALLET_SERVER_URL",           // 🆕
-        "WALLET_SERVER_AUTH_TOKEN"     // 🆕
-    };
-    
-    std::cout << "Validating required configuration..." << std::endl;
-    config.ValidateRequired(required_keys);
-    std::cout << "✓ All required configurations present" << std::endl;
-}
-
 int main(int argc, char* argv[]) 
 {
     std::cout << "=== MPC Engine Coordinator Server ===" << std::endl;
@@ -102,14 +83,27 @@ int main(int argc, char* argv[])
     std::cout << "Loading environment: " << env_type << std::endl;
     
     // 환경 설정 로드
-    EnvConfig env_config;
-    if (!env_config.LoadFromEnv(env_type)) {
-        std::cerr << "Failed to load environment configuration: " << env_type << std::endl;
+    if (!ConfigManager::Instance().Initialize(env_type)) {
+        std::cerr << "Failed to load environment: " << env_type << std::endl;
         return 1;
     }
     
     try {
-        ValidateCoordinatorConfig(env_config);
+        std::vector<std::string> required_keys = {
+            "COORDINATOR_PLATFORM",
+            "NODE_HOSTS",
+            "NODE_IDS",
+            "NODE_PLATFORMS",
+            "NODE_SHARD_INDICES",
+            "MPC_THRESHOLD",
+            "MPC_TOTAL_SHARDS",
+            "WALLET_SERVER_URL",
+            "WALLET_SERVER_AUTH_TOKEN"
+        };        
+        std::cout << "Validating required configuration..." << std::endl;
+        Config::ValidateRequired(required_keys);
+        std::cout << "✓ All required configurations present" << std::endl;
+        
     } catch (const std::exception& e) {
         std::cerr << "✗ Configuration error: " << e.what() << std::endl;
         std::cerr << "\nPlease check your env/.env." << env_type << " file." << std::endl;
@@ -120,13 +114,13 @@ int main(int argc, char* argv[])
         // ========================================
         // 1. KMS 초기화
         // ========================================
-        std::string platform = env_config.GetString("COORDINATOR_PLATFORM");
+        std::string platform = Config::GetString("COORDINATOR_PLATFORM");
         std::cout << "\n=== KMS Initialization ===" << std::endl;
         std::cout << "Coordinator Platform: " << platform << std::endl;
         
         std::string kms_config_path;
         if (platform == "LOCAL" || platform == "local") {
-            kms_config_path = env_config.GetString("COORDINATOR_LOCAL_KMS_PATH");
+            kms_config_path = Config::GetString("COORDINATOR_LOCAL_KMS_PATH");
         }
         // 나중에 AWS, Azure 등 추가
         
@@ -185,8 +179,8 @@ int main(int argc, char* argv[])
         // ========================================
         std::cout << "\n=== Wallet Server Initialization ===" << std::endl;
         
-        std::string wallet_url = env_config.GetString("WALLET_SERVER_URL");
-        std::string wallet_auth_token = env_config.GetString("WALLET_SERVER_AUTH_TOKEN");
+        std::string wallet_url = Config::GetString("WALLET_SERVER_URL");
+        std::string wallet_auth_token = Config::GetString("WALLET_SERVER_AUTH_TOKEN");
         
         if (!coordinator.InitializeWalletServer(wallet_url, wallet_auth_token, tls_ctx)) {
             std::cerr << "✗ Failed to initialize Wallet Server" << std::endl;
@@ -202,13 +196,12 @@ int main(int argc, char* argv[])
         // ========================================
         std::cout << "\n=== Node Configuration ===" << std::endl;
         
-        std::vector<std::pair<std::string, uint16_t>> node_endpoints = 
-            env_config.GetNodeEndpoints("NODE_HOSTS");
-        std::vector<std::string> node_ids = env_config.GetStringArray("NODE_IDS");
-        std::vector<std::string> platforms = env_config.GetStringArray("NODE_PLATFORMS");
-        std::vector<uint16_t> shard_indices = env_config.GetUInt16Array("NODE_SHARD_INDICES");
-        uint32_t threshold = env_config.GetUInt32("MPC_THRESHOLD");
-        uint32_t total_shards = env_config.GetUInt32("MPC_TOTAL_SHARDS");
+        std::vector<std::pair<std::string, uint16_t>> node_endpoints = Config::GetNodeEndpoints("NODE_HOSTS");
+        std::vector<std::string> node_ids = Config::GetStringArray("NODE_IDS");
+        std::vector<std::string> platforms = Config::GetStringArray("NODE_PLATFORMS");
+        std::vector<uint16_t> shard_indices = Config::GetUInt16Array("NODE_SHARD_INDICES");
+        uint32_t threshold = Config::GetUInt32("MPC_THRESHOLD");
+        uint32_t total_shards = Config::GetUInt32("MPC_TOTAL_SHARDS");
         
         if (node_endpoints.empty()) {
             std::cerr << "No node endpoints configured" << std::endl;

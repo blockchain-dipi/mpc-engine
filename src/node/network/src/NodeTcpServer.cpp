@@ -1,5 +1,6 @@
 // src/node/network/src/NodeTcpServer.cpp
 #include "node/network/include/NodeTcpServer.hpp"
+#include "common/config/ConfigManager.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/utils/firewall/KernelFirewall.hpp"
 #include "common/utils/threading/ThreadUtils.hpp"
@@ -10,6 +11,8 @@
 
 namespace mpc_engine::node::network
 {
+    using namespace mpc_engine::config;
+
     NodeTcpServer::NodeTcpServer(const std::string& address, uint16_t port, size_t handler_threads)
     : bind_address(address), bind_port(port), num_handler_threads(handler_threads)
     {
@@ -57,9 +60,10 @@ namespace mpc_engine::node::network
         // Initialize thread pool
         handler_pool = std::make_unique<utils::ThreadPool<HandlerContext>>(num_handler_threads);
         
-        // Initialize send queue (size: num_handlers * 5)
+        // Initialize send queue
+        uint16_t handler_queue_size = Config::GetUInt16("NODE_SEND_QUEUE_SIZE_PER_HANDLER_THREAD");
         send_queue = std::make_unique<utils::ThreadSafeQueue<NetworkMessage>>(
-            num_handler_threads * 5
+            num_handler_threads * handler_queue_size
         );
 
         is_initialized = true;
@@ -347,9 +351,9 @@ namespace mpc_engine::node::network
     void NodeTcpServer::ReceiveLoop()
     {
         using namespace protocol::coordinator_node;
-    
+
         std::cout << "Receive thread started" << std::endl;
-        
+
         socket_t sock = INVALID_SOCKET_VALUE;
         {
             std::lock_guard<std::mutex> lock(connection_mutex);
@@ -357,27 +361,27 @@ namespace mpc_engine::node::network
                 sock = coordinator_connection->coordinator_socket;
             }
         }
-        
+
         if (sock == INVALID_SOCKET_VALUE) {
             std::cerr << "[ERROR] Invalid socket in ReceiveLoop" << std::endl;
             return;
         }
-    
+
         if (!message_handler) {
             std::cerr << "[ERROR] message_handler is null, cannot process messages" << std::endl;
             return;
         }
-    
+
         while (is_running.load() && HasActiveConnection()) {
             NetworkMessage request;
-            
+
             if (!ReceiveMessage(sock, request)) {
                 std::cerr << "[INFO] Connection lost or receive failed" << std::endl;
                 break;
             }
         
             total_messages_received++;
-            
+
             {
                 std::lock_guard<std::mutex> lock(connection_mutex);
                 if (coordinator_connection) {
@@ -392,55 +396,55 @@ namespace mpc_engine::node::network
                 message_handler, 
                 send_queue.get()
             );
-            
+
             try {
                 // ✅ SubmitOwned로 소유권 이전
                 handler_pool->SubmitOwned(ProcessMessage, std::move(context));
-                
+
             } catch (const std::runtime_error& e) {
                 // ✅ context는 이미 move됨 → 메모리 누수 없음
                 std::cerr << "[ERROR] Failed to submit task (pool stopped): " << e.what() << std::endl;
-                
+
                 NetworkMessage error_response = CreateErrorResponse(
                     request.header.message_type,
                     "Server shutting down"
                 );
-                
+
                 utils::QueueResult result = send_queue->TryPush(
                     error_response, 
                     std::chrono::milliseconds(100)
                 );
-                
+
                 if (result != utils::QueueResult::SUCCESS) {
                     std::cerr << "[ERROR] Failed to push error response: " 
                               << utils::ToString(result) << std::endl;
                 }
-                
+
                 break;
-                
+
             } catch (const std::exception& e) {
                 // ✅ context는 이미 move됨 → 메모리 누수 없음
                 std::cerr << "[ERROR] Failed to submit task: " << e.what() << std::endl;
-                
+
                 NetworkMessage error_response = CreateErrorResponse(
                     request.header.message_type,
                     "Server busy"
                 );
-                
+
                 utils::QueueResult result = send_queue->TryPush(
                     error_response, 
                     std::chrono::milliseconds(100)
                 );
-                
+
                 if (result != utils::QueueResult::SUCCESS) {
                     std::cerr << "[ERROR] Failed to push error response: " 
                               << utils::ToString(result) << std::endl;
                 }
-                
+
                 handler_errors++;
             }
         }
-        
+
         std::cout << "Receive thread stopped" << std::endl;
     }
 

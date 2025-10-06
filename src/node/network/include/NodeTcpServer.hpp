@@ -84,7 +84,7 @@ namespace mpc_engine::node::network
         std::atomic<bool> accepting_connections{true};
 
     public:
-        NodeTcpServer(const std::string& address, uint16_t port, size_t handler_threads = 4);
+        NodeTcpServer(const std::string& address, uint16_t port, size_t handler_threads);
         ~NodeTcpServer();
 
         bool Initialize();
