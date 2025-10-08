@@ -31,11 +31,12 @@ _deps/
 logs/
 *.log.*
 
-# Certificates and Keys (보안상 매우 중요!)
-certs/
-*.pem
-*.key
-*.crt
+# Certificates and Keys - 환경별 관리
+# 모든 인증서 폴더는 Git 포함 (공개키라서 안전)
+# 개인키는 .kms/ 폴더와 certs/ca/local/에만 존재
+certs/generated/
+
+# 기타 보안 파일들
 *.p12
 *.pfx
 
