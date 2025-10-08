@@ -1,5 +1,7 @@
 // src/common/network/tls/src/TlsCertificateLoader.cpp
 #include "common/network/tls/include/TlsCertificateLoader.hpp"
+#include "common/kms/include/KMSManager.hpp"
+#include "common/config/ConfigManager.hpp"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -7,14 +9,10 @@
 
 namespace mpc_engine::network::tls
 {
-    TlsCertificateLoader::TlsCertificateLoader(std::shared_ptr<mpc_engine::kms::IKeyManagementService> kms) : kms_(kms)
+    TlsCertificateLoader::TlsCertificateLoader(NodePlatformType platform) : platform_(platform)
     {
-        if (!kms_) {
-            throw std::invalid_argument("KMS cannot be null");
-        }
-
         std::cout << "[TlsCertificateLoader] Initialized for platform: " 
-                  << mpc_engine::config::Config::GetString("COORDINATOR_PLATFORM") << std::endl;
+                  << static_cast<int>(platform_) << std::endl;
     }
 
     std::string TlsCertificateLoader::LoadCaCertificate() 
@@ -32,8 +30,8 @@ namespace mpc_engine::network::tls
                 std::cout << "[TlsCertificateLoader] Successfully loaded CA certificate from: " << ca_path << std::endl;
                 return ca_cert;
             } else {
-                std::cerr << "[TlsCertificateLoader] Cloud platform not implemented yet" << std::endl;
-                return "";
+                auto kms = mpc_engine::kms::KMSManager::GetInstance(platform_);
+                return kms->GetSecret("ca-certificate");
             }
 
         } catch (const std::exception& e) {
@@ -47,25 +45,26 @@ namespace mpc_engine::network::tls
         CertificateData cert_data;
 
         try {
-            if (!IsLocalPlatform()) {
-                std::cerr << "[TlsCertificateLoader] Cloud platform not implemented yet" << std::endl;
-                return cert_data;
-            }
+            if (IsLocalPlatform()) {
+                // 인증서 파일 로드
+                std::string cert_path = GetCoordinatorCertPath();
+                cert_data.certificate_pem = ReadPemFile(cert_path);
+                if (cert_data.certificate_pem.empty()) {
+                    std::cerr << "[TlsCertificateLoader] Coordinator certificate file not found: " << cert_path << std::endl;
+                    return cert_data;
+                }
 
-            // 인증서 파일 로드
-            std::string cert_path = GetCoordinatorCertPath();
-            cert_data.certificate_pem = ReadPemFile(cert_path);
-            if (cert_data.certificate_pem.empty()) {
-                std::cerr << "[TlsCertificateLoader] Coordinator certificate file not found: " << cert_path << std::endl;
-                return cert_data;
-            }
-
-            // 개인키 파일 로드
-            std::string key_path = GetCoordinatorKeyPath();
-            cert_data.private_key_pem = ReadPemFile(key_path);
-            if (cert_data.private_key_pem.empty()) {
-                std::cerr << "[TlsCertificateLoader] Coordinator private key file not found: " << key_path << std::endl;
-                return cert_data;
+                // 개인키 파일 로드
+                std::string key_path = GetCoordinatorKeyPath();
+                cert_data.private_key_pem = ReadPemFile(key_path);
+                if (cert_data.private_key_pem.empty()) {
+                    std::cerr << "[TlsCertificateLoader] Coordinator private key file not found: " << key_path << std::endl;
+                    return cert_data;
+                }
+            } else {
+                auto kms = mpc_engine::kms::KMSManager::GetInstance(platform_);
+                cert_data.certificate_pem = kms->GetSecret("coordinator-certificate");
+                cert_data.private_key_pem = kms->GetSecret("coordinator-private-key");
             }
 
             // CA 체인 로드
@@ -85,30 +84,31 @@ namespace mpc_engine::network::tls
         CertificateData cert_data;
 
         try {
-            if (!IsLocalPlatform()) {
-                std::cerr << "[TlsCertificateLoader] Cloud platform not implemented yet" << std::endl;
-                return cert_data;
-            }
-
             if (node_index < 0 || node_index > 2) {
                 std::cerr << "[TlsCertificateLoader] Invalid node index: " << node_index << std::endl;
                 return cert_data;
             }
 
-            // 인증서 파일 로드
-            std::string cert_path = GetNodeCertPath(node_index);
-            cert_data.certificate_pem = ReadPemFile(cert_path);
-            if (cert_data.certificate_pem.empty()) {
-                std::cerr << "[TlsCertificateLoader] Node certificate file not found: " << cert_path << std::endl;
-                return cert_data;
-            }
+            if (IsLocalPlatform()) {
+                // 인증서 파일 로드
+                std::string cert_path = GetNodeCertPath(node_index);
+                cert_data.certificate_pem = ReadPemFile(cert_path);
+                if (cert_data.certificate_pem.empty()) {
+                    std::cerr << "[TlsCertificateLoader] Node certificate file not found: " << cert_path << std::endl;
+                    return cert_data;
+                }
 
-            // 개인키 파일 로드
-            std::string key_path = GetNodeKeyPath(node_index);
-            cert_data.private_key_pem = ReadPemFile(key_path);
-            if (cert_data.private_key_pem.empty()) {
-                std::cerr << "[TlsCertificateLoader] Node private key file not found: " << key_path << std::endl;
-                return cert_data;
+                // 개인키 파일 로드
+                std::string key_path = GetNodeKeyPath(node_index);
+                cert_data.private_key_pem = ReadPemFile(key_path);
+                if (cert_data.private_key_pem.empty()) {
+                    std::cerr << "[TlsCertificateLoader] Node private key file not found: " << key_path << std::endl;
+                    return cert_data;
+                }
+            } else {
+                auto kms = mpc_engine::kms::KMSManager::GetInstance(platform_);
+                cert_data.certificate_pem = kms->GetSecret("node" + std::to_string(node_index + 1) + "-certificate");
+                cert_data.private_key_pem = kms->GetSecret("node" + std::to_string(node_index + 1) + "-private-key");
             }
 
             // CA 체인 로드
@@ -126,11 +126,6 @@ namespace mpc_engine::network::tls
     bool TlsCertificateLoader::IsHealthy() 
     {
         try {
-            if (!IsLocalPlatform()) {
-                std::cerr << "[TlsCertificateLoader] Only local platform supported currently" << std::endl;
-                return false;
-            }
-
             // CA 인증서 존재 확인
             std::string ca_cert = LoadCaCertificate();
             if (ca_cert.empty()) {
@@ -148,7 +143,7 @@ namespace mpc_engine::network::tls
     void TlsCertificateLoader::PrintStatus() 
     {
         std::cout << "\n=== TLS Certificate Loader Status ===" << std::endl;
-        std::cout << "Platform: " << mpc_engine::config::Config::GetString("COORDINATOR_PLATFORM") << std::endl;
+        std::cout << "Platform: " << static_cast<int>(platform_) << std::endl;
         std::cout << "Healthy: " << (IsHealthy() ? "Yes" : "No") << std::endl;
 
         if (IsLocalPlatform()) {
@@ -200,8 +195,7 @@ namespace mpc_engine::network::tls
 
     bool TlsCertificateLoader::IsLocalPlatform() 
     {
-        std::string platform = mpc_engine::config::Config::GetString("COORDINATOR_PLATFORM");
-        return platform == "LOCAL";
+        return platform_ == NodePlatformType::LOCAL;
     }
 
     std::string TlsCertificateLoader::ReadPemFile(const std::string& file_path) 

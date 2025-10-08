@@ -7,9 +7,10 @@ namespace mpc_engine::node
     enum class NodePlatformType 
     {
         LOCAL = 0,
-        AWS = 1,
-        IBM = 2,
-        AZURE = 3,
+        AWS,
+        AZURE,
+        IBM,
+        GOOGLE,
         UNKNOWN = 99
     };
 
