@@ -3,9 +3,9 @@
 #include "common/config/ConfigManager.hpp"
 #include "common/types/BasicTypes.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
-#include "common/kms/include/KMSFactory.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
+#include "common/kms/include/KMSManager.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include <iostream>
 #include <signal.h>
@@ -114,45 +114,20 @@ int main(int argc, char* argv[])
         // ========================================
         // 1. KMS 초기화
         // ========================================
-        std::string platform = Config::GetString("COORDINATOR_PLATFORM");
+        std::string platform_type = Config::GetString("COORDINATOR_PLATFORM");
+        NodePlatformType platform = FromString(platform_type);
         std::cout << "\n=== KMS Initialization ===" << std::endl;
-        std::cout << "Coordinator Platform: " << platform << std::endl;
+        std::cout << "Coordinator Platform: " << platform_type << std::endl;
         
         std::string kms_config_path;
-        if (platform == "LOCAL" || platform == "local") {
+        if (platform == NodePlatformType::LOCAL) {
             kms_config_path = Config::GetString("COORDINATOR_LOCAL_KMS_PATH");
         }
-        // 나중에 AWS, Azure 등 추가
-        
-        auto kms = KMSFactory::Create(platform, kms_config_path);
-        if (!kms->Initialize()) {
-            std::cerr << "Failed to initialize KMS" << std::endl;
-            return 1;
-        }
+        KMSManager::InitializeLocal(NodePlatformType::UNKNOWN, kms_config_path);
         std::cout << "✓ KMS initialized successfully" << std::endl;
         
         // ========================================
-        // 2. TLS Context 초기화 (🆕)
-        // ========================================
-        std::cout << "\n=== TLS Context Initialization ===" << std::endl;
-        
-        TlsConfig tls_config;
-        tls_config.mode = TlsMode::CLIENT;
-        tls_config.verify_peer = false;  // Phase 10에서 true로 변경 예정
-        
-        // 🆕 Phase 10에서 KMS로부터 CA 인증서 로드 추가 예정
-        // std::string ca_cert = kms->GetSecret("wallet_ca_cert");
-        // tls_config.ca_cert_pem = ca_cert;
-        
-        TlsContext tls_ctx;
-        if (!tls_ctx.Initialize(tls_config)) {
-            std::cerr << "Failed to initialize TLS context" << std::endl;
-            return 1;
-        }
-        std::cout << "✓ TLS context initialized (Client mode)" << std::endl;
-        
-        // ========================================
-        // 3. Coordinator Server 초기화
+        // 2. Coordinator Server 초기화
         // ========================================
         std::cout << "\n=== Coordinator Server Initialization ===" << std::endl;
         
@@ -175,24 +150,22 @@ int main(int argc, char* argv[])
         std::cout << "✓ Coordinator server started" << std::endl;
         
         // ========================================
-        // 4. Wallet Server 초기화 (🆕)
+        // 3. Wallet Server 초기화
         // ========================================
         std::cout << "\n=== Wallet Server Initialization ===" << std::endl;
-        
+
         std::string wallet_url = Config::GetString("WALLET_SERVER_URL");
         std::string wallet_auth_token = Config::GetString("WALLET_SERVER_AUTH_TOKEN");
-        
-        if (!coordinator.InitializeWalletServer(wallet_url, wallet_auth_token, tls_ctx)) {
+
+        if (!coordinator.InitializeWalletServer(wallet_url, wallet_auth_token)) {
             std::cerr << "✗ Failed to initialize Wallet Server" << std::endl;
             std::cerr << "  Note: This is expected if Wallet Server is not running yet" << std::endl;
-            std::cerr << "  Coordinator will continue without Wallet integration" << std::endl;
         } else {
             std::cout << "✓ Wallet Server initialized" << std::endl;
-            std::cout << "  URL: " << wallet_url << std::endl;
         }
         
         // ========================================
-        // 5. Node 설정 로드 및 등록
+        // 4. Node 설정 로드 및 등록
         // ========================================
         std::cout << "\n=== Node Configuration ===" << std::endl;
         
@@ -209,7 +182,7 @@ int main(int argc, char* argv[])
         }
         
         std::cout << "  Environment: " << env_type << std::endl;
-        std::cout << "  Platform: " << platform << std::endl;
+        std::cout << "  Platform: " << platform_type << std::endl;
         std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
         std::cout << "  Target Nodes:" << std::endl;
         
@@ -233,7 +206,7 @@ int main(int argc, char* argv[])
         std::cout << "✓ All nodes registered" << std::endl;
         
         // ========================================
-        // 6. Node 연결 (선택적)
+        // 5. Node 연결
         // ========================================
         std::cout << "\n=== Node Connection ===" << std::endl;
         std::cout << "Attempting to connect to registered nodes..." << std::endl;
@@ -257,13 +230,13 @@ int main(int argc, char* argv[])
         }
         
         // ========================================
-        // 7. 시작 정보 출력
+        // 6. 시작 정보 출력
         // ========================================
         std::cout << "\n========================================" << std::endl;
         std::cout << "  Coordinator Server Running" << std::endl;
         std::cout << "========================================" << std::endl;
         std::cout << "  Environment: " << env_type << std::endl;
-        std::cout << "  Platform: " << platform << std::endl;
+        std::cout << "  Platform: " << platform_type << std::endl;
         std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
         std::cout << "  Registered Nodes: " << node_ids.size() << std::endl;
         std::cout << "  Connected Nodes: " << connected_count << std::endl;
@@ -272,7 +245,7 @@ int main(int argc, char* argv[])
         std::cout << "\nPress Ctrl+C to shutdown gracefully..." << std::endl;
         
         // ========================================
-        // 8. 메인 루프
+        // 7. 메인 루프
         // ========================================
         {
             std::unique_lock<std::mutex> lock(g_shutdown_mutex);

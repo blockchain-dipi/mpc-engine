@@ -6,7 +6,6 @@
 
 namespace mpc_engine::coordinator::network
 {
-    using namespace protocol::coordinator_wallet;
     using namespace https;
 
     bool WalletServerManager::Initialize(
@@ -29,8 +28,7 @@ namespace mpc_engine::coordinator::network
         conn_info_.auth_token = auth_token;
 
         if (!conn_info_.ParseUrl(wallet_url)) {
-            std::cerr << "[WalletServerManager] Failed to parse URL: " 
-                      << wallet_url << std::endl;
+            std::cerr << "[WalletServerManager] Failed to parse URL: " << wallet_url << std::endl;
             return false;
         }
 
@@ -45,12 +43,9 @@ namespace mpc_engine::coordinator::network
         pool_config.max_connections = 10;
         pool_config.min_idle = 2;
         pool_config.max_idle_time_ms = 60000;
-
         pool_ = std::make_unique<HttpsConnectionPool>(pool_config);
-
         if (!pool_->Initialize(tls_ctx)) {
-            std::cerr << "[WalletServerManager] Failed to initialize connection pool" 
-                      << std::endl;
+            std::cerr << "[WalletServerManager] Failed to initialize connection pool" << std::endl;
             return false;
         }
 
@@ -64,9 +59,7 @@ namespace mpc_engine::coordinator::network
         return true;
     }
 
-    std::unique_ptr<WalletSigningResponse> WalletServerManager::SendSigningRequest(
-        const WalletSigningRequest& request
-    ) 
+    std::unique_ptr<WalletSigningResponse> WalletServerManager::SendSigningRequest(const WalletSigningRequest& request) 
     {
         if (!is_initialized_.load()) {
             std::cerr << "[WalletServerManager] Not initialized" << std::endl;

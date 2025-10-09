@@ -48,8 +48,7 @@ void PrintTestResult(const std::string& test_name, bool passed) {
 class TestNodeServer {
 public:
     TestNodeServer(const std::string& id, uint16_t port, uint32_t shard_idx)
-        : node_id_(id), port_(port), shard_index_(shard_idx),
-          server_(std::make_unique<NodeServer>(NodePlatformType::LOCAL))
+        : node_id_(id), port_(port), shard_index_(shard_idx)
     {
     }
 
@@ -59,8 +58,8 @@ public:
         config.bind_address = "127.0.0.1";
         config.bind_port = port_;
         config.platform_type = NodePlatformType::LOCAL;
-        
-        server_->SetNodeConfig(config);
+       
+        server_ = std::make_unique<NodeServer>(config);
         
         if (!server_->Initialize()) {
             std::cerr << "Failed to initialize " << node_id_ << std::endl;

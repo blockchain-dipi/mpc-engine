@@ -49,10 +49,6 @@ namespace mpc_engine::network::tls
         TlsMode mode = TlsMode::CLIENT;
         TlsVersion min_version = TlsVersion::TLS_1_2;
         
-        // mTLS 설정
-        bool require_client_cert = false;
-        bool verify_peer = true;
-        
         // 암호화 스위트 (비어있으면 기본값 사용)
         std::string cipher_list;
         std::string cipher_suites;
@@ -63,7 +59,6 @@ namespace mpc_engine::network::tls
         
         static TlsConfig CreateSecureClientConfig();
         static TlsConfig CreateSecureServerConfig();
-        bool Validate(std::string* error_msg = nullptr) const;
     };
 
     /**

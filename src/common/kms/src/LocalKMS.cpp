@@ -63,7 +63,7 @@ namespace mpc_engine::kms
         fs::path key_file = storage_path / (key + ".key");
         
         try {
-            // 🆕 기존 파일이 있으면 쓰기 권한 복구
+            // 기존 파일이 있으면 쓰기 권한 복구
             if (fs::exists(key_file)) {
                 fs::permissions(key_file, 
                     fs::perms::owner_read | fs::perms::owner_write,
@@ -100,7 +100,7 @@ namespace mpc_engine::kms
             throw KMSException("LocalKMS is not initialized");
         }
         
-        fs::path key_file = storage_path / (key + ".key");
+        fs::path key_file = storage_path / key;
         
         if (!fs::exists(key_file)) {
             throw SecretNotFoundException(key);
@@ -151,7 +151,7 @@ namespace mpc_engine::kms
         }
         
         try {
-            // 🆕 삭제 전 쓰기 권한 복구
+            // 삭제 전 쓰기 권한 복구
             fs::permissions(key_file, 
                 fs::perms::owner_read | fs::perms::owner_write,
                 fs::perm_options::replace);

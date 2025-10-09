@@ -1,12 +1,13 @@
 // src/node/network/src/NodeConnectionInfo.cpp
 #include "node/network/include/NodeConnectionInfo.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
+#include <stdexcept>
 
 namespace mpc_engine::node::network
 {
-    void NodeConnectionInfo::Initialize(socket_t sock, const std::string& addr, uint16_t port) 
+    void NodeConnectionInfo::InitializeWithTls(const std::string& addr, uint16_t port, std::unique_ptr<TlsConnection> tls_conn) 
     {
-        coordinator_socket = sock;
+        tls_connection = std::move(tls_conn);
         coordinator_address = addr;
         coordinator_port = port;
         connection_start_time = utils::GetCurrentTimeMs();
@@ -16,7 +17,7 @@ namespace mpc_engine::node::network
 
     bool NodeConnectionInfo::IsValid() const 
     {
-        return coordinator_socket != INVALID_SOCKET_VALUE && !coordinator_address.empty() && coordinator_port > 0;
+        return tls_connection != nullptr && !coordinator_address.empty() && coordinator_port > 0;
     }
 
     bool NodeConnectionInfo::IsActive() const 
@@ -27,5 +28,13 @@ namespace mpc_engine::node::network
     std::string NodeConnectionInfo::ToString() const 
     {
         return coordinator_address + ":" + std::to_string(coordinator_port);
+    }
+    
+    TlsConnection& NodeConnectionInfo::GetTlsConnection() const
+    {
+        if (!tls_connection) {
+            throw std::runtime_error("TLS connection is null");
+        }
+        return *tls_connection;
     }
 }

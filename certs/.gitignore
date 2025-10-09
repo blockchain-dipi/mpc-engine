@@ -1,0 +1,11 @@
+# 발급 임시 폴더 제외
+generated/
+
+# 환경별 인증서 관리
+# local/ - Git 포함 (개발용)
+# dev/ - Git 제외 (개발 서버용)
+dev/
+# staging/ - Git 제외 (스테이징용)
+staging/
+# prod/ - Git 제외 (프로덕션용)
+prod/

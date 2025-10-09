@@ -31,7 +31,7 @@ namespace mpc_engine::utils
             std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
-    // 🆕 정확한 송수신 함수들
+    // 정확한 송수신 함수들
     enum class SocketIOResult {
         SUCCESS = 0,
         CONNECTION_CLOSED = 1,    // 정상 연결 종료 (recv: 0 반환)

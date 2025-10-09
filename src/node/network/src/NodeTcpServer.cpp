@@ -4,14 +4,19 @@
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/utils/firewall/KernelFirewall.hpp"
 #include "common/utils/threading/ThreadUtils.hpp"
+#include "common/kms/include/KMSManager.hpp"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <iostream>
+#include <fstream>
 
 namespace mpc_engine::node::network
 {
     using namespace mpc_engine::config;
+    using namespace mpc_engine::kms;
+
+    constexpr uint32_t THREAD_JOIN_TIMEOUT_MS = 5000;  // 5초
 
     NodeTcpServer::NodeTcpServer(const std::string& address, uint16_t port, size_t handler_threads)
     : bind_address(address), bind_port(port), num_handler_threads(handler_threads)
@@ -25,11 +30,64 @@ namespace mpc_engine::node::network
     {
         Stop();
     }
+    
+    bool NodeTcpServer::InitializeTlsContext(const std::string& certificate_path, const std::string& private_key_id)
+    {
+        tls_context = std::make_unique<TlsContext>();
 
-    bool NodeTcpServer::Initialize() 
+        TlsConfig config = TlsConfig::CreateSecureServerConfig();        
+        if (!tls_context->Initialize(config)) {
+            return false;
+        }
+
+        auto& kms = KMSManager::Instance();
+        try {
+            // 1. CA 인증서 로드 (클라이언트 인증서 검증용) ← 추가 필요
+            std::string tls_ca = ConfigManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
+            std::string ca_pem = kms.GetSecret(tls_ca);
+            if (ca_pem.empty()) {
+                std::cerr << "[NodeTcpServer] Failed to load CA certificate from KMS" << std::endl;
+                return false;
+            }
+
+            if (!tls_context->LoadCA(ca_pem)) {
+                std::cerr << "[NodeTcpServer] Failed to load CA certificate to context" << std::endl;
+                return false;
+            }
+
+            // 2. 서버 인증서 로드 (기존 코드)
+            std::ifstream cert_file(certificate_path);
+            if (!cert_file) {
+                return false;
+            }
+            std::string certificate_pem((std::istreambuf_iterator<char>(cert_file)), std::istreambuf_iterator<char>());
+            std::string private_key_pem = kms.GetSecret(private_key_id);
+
+            if (certificate_pem.empty() || private_key_pem.empty()) {
+                return false;
+            }
+
+            CertificateData cert_data;
+            cert_data.certificate_pem = certificate_pem;
+            cert_data.private_key_pem = private_key_pem;
+
+            return tls_context->LoadCertificate(cert_data);
+
+        } catch (const std::exception& e) {
+            return false;
+        }
+    }
+
+    bool NodeTcpServer::Initialize(const std::string& certificate_path, const std::string& private_key_id)
     {
         if (is_initialized.load()) {
             return true;
+        }
+
+        std::cout << "Initializing NodeTcpServer..." << std::endl;
+        if (!InitializeTlsContext(certificate_path, private_key_id)) {
+            std::cerr << "Failed to initialize TLS" << std::endl;
+            return false;
         }
 
         // Create server socket
@@ -149,9 +207,7 @@ namespace mpc_engine::node::network
             send_queue->Shutdown();
         }
 
-        // 🆕 6단계: 스레드 안전 종료 (타임아웃 적용)
-        constexpr uint32_t THREAD_JOIN_TIMEOUT_MS = 5000;  // 5초
-        
+        // 6단계: 스레드 안전 종료 (타임아웃 적용)
         std::cout << "[Threads] Waiting for threads to stop (timeout: " 
                   << THREAD_JOIN_TIMEOUT_MS << "ms)..." << std::endl;
 
@@ -301,71 +357,63 @@ namespace mpc_engine::node::network
         std::cout << "Connection thread stopped" << std::endl;
     }
 
-    void NodeTcpServer::HandleCoordinatorConnection(
-        socket_t client_socket,
-        const std::string& client_ip,
-        uint16_t client_port
-    ) {
-        // Create connection info
+    void NodeTcpServer::HandleCoordinatorConnection(socket_t client_socket, const std::string& client_ip, uint16_t client_port) 
+    {
+        // TLS Connection 생성 및 핸드셰이크
+        auto tls_connection = std::make_unique<TlsConnection>();
+
+        TlsConnectionConfig tls_config;
+        tls_config.handshake_timeout_ms = 10000;
+
+        if (!tls_connection->AcceptServer(*tls_context, client_socket, tls_config)) {
+            utils::CloseSocket(client_socket);
+            return;
+        }
+
+        if (!tls_connection->DoHandshake()) {
+            utils::CloseSocket(client_socket);
+            return;
+        }
+
+        // NodeConnectionInfo 생성 (TLS Connection 포함)
         {
             std::lock_guard<std::mutex> lock(connection_mutex);
             coordinator_connection = std::make_unique<NodeConnectionInfo>();
-            coordinator_connection->Initialize(client_socket, client_ip, client_port);
+            coordinator_connection->InitializeWithTls(client_ip, client_port, std::move(tls_connection));
         }
 
-        // Notify connected
+        // connected_handler 호출
         if (connected_handler) {
             connected_handler(*coordinator_connection);
         }
 
-        // Start receive and send threads
+        // 스레드 시작
         receive_thread = std::thread(&NodeTcpServer::ReceiveLoop, this);
         send_thread = std::thread(&NodeTcpServer::SendLoop, this);
 
-        // Wait for threads to complete
-        if (receive_thread.joinable()) {
-            receive_thread.join();
-        }
-        if (send_thread.joinable()) {
-            send_thread.join();
-        }
-
-        // Connection closed
-        std::unique_ptr<NodeConnectionInfo> info_copy;
+        // 연결 종료 처리 (TLS Close 추가)
+        NodeConnectionInfo::DisconnectionInfo disconnect_info;
         {
             std::lock_guard<std::mutex> lock(connection_mutex);
             if (coordinator_connection) {
-                coordinator_connection->status = ConnectionStatus::DISCONNECTED;
-                info_copy = std::make_unique<NodeConnectionInfo>(*coordinator_connection);
-
-                utils::CloseSocket(coordinator_connection->coordinator_socket);
+                // 종료 전 정보 백업
+                disconnect_info = coordinator_connection->GetDisconnectionInfo();
+                
+                // 안전한 종료
+                coordinator_connection->Disconnect();
                 coordinator_connection.reset();
             }
         }
-        // 콜백 호출 (lock 밖, 복사본 사용)
-        if (info_copy && disconnected_handler) {
-            disconnected_handler(*info_copy);
+    
+        // 콜백 호출 (나중에 로깅, 통계, 재연결 로직 등 추가 가능)
+        if (disconnected_handler && !disconnect_info.coordinator_address.empty()) {
+            disconnected_handler(disconnect_info);
         }
     }
 
     void NodeTcpServer::ReceiveLoop()
     {
-        using namespace protocol::coordinator_node;
-
         std::cout << "Receive thread started" << std::endl;
-
-        socket_t sock = INVALID_SOCKET_VALUE;
-        {
-            std::lock_guard<std::mutex> lock(connection_mutex);
-            if (coordinator_connection) {
-                sock = coordinator_connection->coordinator_socket;
-            }
-        }
-
-        if (sock == INVALID_SOCKET_VALUE) {
-            std::cerr << "[ERROR] Invalid socket in ReceiveLoop" << std::endl;
-            return;
-        }
 
         if (!message_handler) {
             std::cerr << "[ERROR] message_handler is null, cannot process messages" << std::endl;
@@ -375,7 +423,8 @@ namespace mpc_engine::node::network
         while (is_running.load() && HasActiveConnection()) {
             NetworkMessage request;
 
-            if (!ReceiveMessage(sock, request)) {
+            // socket 파라미터 제거 - ReceiveMessage 내부에서 TLS Connection 가져옴
+            if (!ReceiveMessage(request)) {  // socket 파라미터는 더미값
                 std::cerr << "[INFO] Connection lost or receive failed" << std::endl;
                 break;
             }
@@ -390,7 +439,6 @@ namespace mpc_engine::node::network
                 }
             }
         
-            // ✅ unique_ptr로 생성
             auto context = std::make_unique<HandlerContext>(
                 request, 
                 message_handler, 
@@ -398,11 +446,9 @@ namespace mpc_engine::node::network
             );
 
             try {
-                // ✅ SubmitOwned로 소유권 이전
                 handler_pool->SubmitOwned(ProcessMessage, std::move(context));
 
             } catch (const std::runtime_error& e) {
-                // ✅ context는 이미 move됨 → 메모리 누수 없음
                 std::cerr << "[ERROR] Failed to submit task (pool stopped): " << e.what() << std::endl;
 
                 NetworkMessage error_response = CreateErrorResponse(
@@ -423,7 +469,6 @@ namespace mpc_engine::node::network
                 break;
 
             } catch (const std::exception& e) {
-                // ✅ context는 이미 move됨 → 메모리 누수 없음
                 std::cerr << "[ERROR] Failed to submit task: " << e.what() << std::endl;
 
                 NetworkMessage error_response = CreateErrorResponse(
@@ -451,50 +496,31 @@ namespace mpc_engine::node::network
     void NodeTcpServer::SendLoop()
     {
         std::cout << "Send thread started" << std::endl;
-        
-        socket_t sock = INVALID_SOCKET_VALUE;
-        {
-            std::lock_guard<std::mutex> lock(connection_mutex);
-            if (coordinator_connection) {
-                sock = coordinator_connection->coordinator_socket;
-            }
-        }
-        
-        if (sock == INVALID_SOCKET_VALUE) {
-            std::cerr << "Invalid socket in SendLoop" << std::endl;
-            return;
-        }
 
         while (is_running.load() && HasActiveConnection()) {
-            NetworkMessage response;
-            
-            // 🆕 QueueResult 사용
-            utils::QueueResult result = send_queue->Pop(response);
-            
-            if (result == utils::QueueResult::SHUTDOWN) {
-                std::cout << "[INFO] Send queue shutdown" << std::endl;
-                break;
-            }
-            
+            NetworkMessage outMessage;
+            utils::QueueResult result = send_queue->Pop(outMessage);
             if (result != utils::QueueResult::SUCCESS) {
-                std::cerr << "[ERROR] Pop from send queue failed: " 
-                          << utils::ToString(result) << std::endl;
+                continue;
+            }
+        
+            // socket 파라미터 제거 - SendMessage 내부에서 TLS Connection 가져옴
+            if (!SendMessage(outMessage)) {  // socket 파라미터는 더미값
+                std::cerr << "[INFO] Connection lost or send failed" << std::endl;
                 break;
             }
-
-            if (SendMessage(sock, response)) {
-                total_messages_sent++;
-                
+        
+            total_messages_sent++;
+        
+            {
                 std::lock_guard<std::mutex> lock(connection_mutex);
                 if (coordinator_connection) {
-                    coordinator_connection->successful_requests++;
+                    coordinator_connection->last_activity_time = utils::GetCurrentTimeMs();
+                    coordinator_connection->total_responses_sent++;
                 }
-            } else {
-                std::cerr << "Failed to send response" << std::endl;
-                break;
             }
         }
-        
+
         std::cout << "Send thread stopped" << std::endl;
     }
 
@@ -615,6 +641,99 @@ namespace mpc_engine::node::network
         }
     }
 
+    bool NodeTcpServer::SendMessage(const NetworkMessage& outMessage)
+    {
+        // TLS Connection 획득
+        TlsConnection* tls_conn = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(connection_mutex);
+            if (coordinator_connection) {
+                tls_conn = &coordinator_connection->GetTlsConnection();
+            }
+        }
+
+        if (!tls_conn) {
+            return false;
+        }
+
+        // 기존 utils::SendExact 로직을 TLS로 교체
+        TlsError error = tls_conn->WriteExact(&outMessage.header, sizeof(MessageHeader));
+        if (error != TlsError::NONE) {
+            return false;
+        }
+
+        if (outMessage.header.body_length > 0) {
+            error = tls_conn->WriteExact(outMessage.body.data(), outMessage.body.size());
+            if (error != TlsError::NONE) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool NodeTcpServer::ReceiveMessage(NetworkMessage& outMessage)
+    {
+        // TLS Connection 획득
+        TlsConnection* tls_conn = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(connection_mutex);
+            if (coordinator_connection) {
+                tls_conn = &coordinator_connection->GetTlsConnection();
+            }
+        }
+
+        if (!tls_conn) {
+            return false;
+        }
+
+        // 기존 utils::ReceiveExact 로직을 TLS로 교체
+        TlsError error = tls_conn->ReadExact(&outMessage.header, sizeof(MessageHeader));
+        if (error != TlsError::NONE) {
+            if (error == TlsError::CONNECTION_CLOSED) {
+                std::cout << "[INFO] Connection closed gracefully" << std::endl;
+            }
+            return false;
+        }
+
+        // 기존 검증 로직 그대로 유지
+        ValidationResult validation = outMessage.header.ValidateBasic();
+        if (validation != ValidationResult::OK) {
+            std::cerr << "[SECURITY] Header validation failed: " << ToString(validation) << std::endl;
+            std::cerr << "[SECURITY]   Magic: 0x" << std::hex << outMessage.header.magic << std::dec << std::endl;
+            std::cerr << "[SECURITY]   Version: " << outMessage.header.version << std::endl;
+            std::cerr << "[SECURITY]   Body length: " << outMessage.header.body_length << std::endl;
+            return false;
+        }
+
+        if (!outMessage.header.IsValidMessageType()) {
+            std::cerr << "[SECURITY] Invalid message type: " << outMessage.header.message_type << std::endl;
+            return false;
+        }
+
+        if (outMessage.header.body_length > 0) {
+            try {
+                outMessage.body.resize(outMessage.header.body_length);
+            } catch (const std::bad_alloc& e) {
+                std::cerr << "[SECURITY] Memory allocation failed for body: " << e.what() << std::endl;
+                return false;
+            }
+        
+            error = tls_conn->ReadExact(outMessage.body.data(), outMessage.header.body_length);
+            if (error != TlsError::NONE) {
+                return false;
+            }
+        }
+
+        validation = outMessage.Validate();
+        if (validation != ValidationResult::OK) {
+            std::cerr << "[SECURITY] Message validation failed: " << ToString(validation) << std::endl;
+            return false;
+        }
+
+        return true;
+    }
+
     bool NodeTcpServer::IsAuthorized(const std::string& client_ip)
     {
         return security_config.IsAllowed(client_ip);
@@ -627,8 +746,8 @@ namespace mpc_engine::node::network
         if (coordinator_connection) {
             std::cout << "Closing existing connection" << std::endl;
             
-            if (coordinator_connection->coordinator_socket != INVALID_SOCKET_VALUE) {
-                utils::CloseSocket(coordinator_connection->coordinator_socket);
+            if (coordinator_connection->tls_connection) {
+                coordinator_connection->tls_connection->Close();
             }
             
             coordinator_connection.reset();
@@ -649,123 +768,6 @@ namespace mpc_engine::node::network
         
         utils::SetSocketRecvTimeout(sock, 30000);
         utils::SetSocketBufferSize(sock, 64 * 1024, 64 * 1024);
-    }
-
-    bool NodeTcpServer::SendMessage(socket_t sock, const NetworkMessage& outMessage)
-    {
-        // ✅ SendExact 사용
-        size_t bytes_sent = 0;
-        
-        // 1. 헤더 전송
-        utils::SocketIOResult result = utils::SendExact(
-            sock, 
-            &outMessage.header, 
-            sizeof(MessageHeader), 
-            &bytes_sent
-        );
-        
-        if (result != utils::SocketIOResult::SUCCESS) {
-            std::cerr << "[ERROR] Failed to send header: " 
-                      << utils::ToString(result) << std::endl;
-            return false;
-        }
-
-        // 2. Body 전송 (있으면)
-        if (outMessage.header.body_length > 0) {
-            result = utils::SendExact(
-                sock, 
-                outMessage.body.data(), 
-                outMessage.body.size(), 
-                &bytes_sent
-            );
-            
-            if (result != utils::SocketIOResult::SUCCESS) {
-                std::cerr << "[ERROR] Failed to send body: " 
-                          << utils::ToString(result) 
-                          << " (sent: " << bytes_sent << "/" << outMessage.body.size() << " bytes)" 
-                          << std::endl;
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    bool NodeTcpServer::ReceiveMessage(socket_t sock, NetworkMessage& outMessage)
-    {
-        size_t bytes_received = 0;
-        
-        // ✅ 1단계: 헤더 수신 (ReceiveExact 사용)
-        utils::SocketIOResult result = utils::ReceiveExact(
-            sock, 
-            &outMessage.header, 
-            sizeof(MessageHeader), 
-            &bytes_received
-        );
-        
-        if (result != utils::SocketIOResult::SUCCESS) {
-            if (result == utils::SocketIOResult::CONNECTION_CLOSED) {
-                std::cout << "[INFO] Connection closed gracefully" << std::endl;
-            } else {
-                std::cerr << "[SECURITY] Header receive failed: " 
-                          << utils::ToString(result) 
-                          << " (received: " << bytes_received << "/" << sizeof(MessageHeader) << " bytes)" 
-                          << std::endl;
-            }
-            return false;
-        }
-    
-        // ✅ 2단계: 헤더 기본 검증
-        ValidationResult validation = outMessage.header.ValidateBasic();
-        if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Header validation failed: " << ToString(validation) << std::endl;
-            std::cerr << "[SECURITY]   Magic: 0x" << std::hex << outMessage.header.magic << std::dec << std::endl;
-            std::cerr << "[SECURITY]   Version: " << outMessage.header.version << std::endl;
-            std::cerr << "[SECURITY]   Body length: " << outMessage.header.body_length << std::endl;
-            return false;
-        }
-    
-        // ✅ 3단계: 메시지 타입 검증
-        if (!outMessage.header.IsValidMessageType()) {
-            std::cerr << "[SECURITY] Invalid message type: " << outMessage.header.message_type << std::endl;
-            return false;
-        }
-    
-        // ✅ 4단계: Body 수신 (크기가 이미 검증됨)
-        if (outMessage.header.body_length > 0) {
-            try {
-                outMessage.body.resize(outMessage.header.body_length);
-            } catch (const std::bad_alloc& e) {
-                std::cerr << "[SECURITY] Memory allocation failed for body: " << e.what() << std::endl;
-                return false;
-            }
-        
-            bytes_received = 0;
-            result = utils::ReceiveExact(
-                sock, 
-                outMessage.body.data(), 
-                outMessage.header.body_length, 
-                &bytes_received
-            );
-            
-            if (result != utils::SocketIOResult::SUCCESS) {
-                std::cerr << "[SECURITY] Body receive failed: " 
-                          << utils::ToString(result)
-                          << " (received: " << bytes_received 
-                          << "/" << outMessage.header.body_length << " bytes)" << std::endl;
-                return false;
-            }
-        }
-    
-        // ✅ 5단계: 전체 메시지 검증 (checksum 포함)
-        validation = outMessage.Validate();
-        if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Message validation failed: " << ToString(validation) << std::endl;
-            return false;
-        }
-    
-        // ✅ 모든 검증 통과
-        return true;
     }
 
     void NodeTcpServer::SetTrustedCoordinator(const std::string& ip)
@@ -790,7 +792,7 @@ namespace mpc_engine::node::network
         connected_handler = handler;
     }
 
-    void NodeTcpServer::SetDisconnectedHandler(ConnectionHandler handler)
+    void NodeTcpServer::SetDisconnectedHandler(DisconnectionHandler handler)
     {
         disconnected_handler = handler;
     }

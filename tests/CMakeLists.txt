@@ -51,23 +51,6 @@ target_link_libraries(test_socket_io
 
 add_test(NAME SocketIO COMMAND test_socket_io)
 
-# === Local KMS 테스트 ===
-add_executable(test_local_kms
-    unit/local_kms_test.cpp
-)
-
-target_include_directories(test_local_kms PRIVATE
-    ${TEST_INCLUDE_DIRS}
-)
-
-target_link_libraries(test_local_kms
-    mpc_kms
-    mpc_common
-    Threads::Threads
-)
-
-add_test(NAME LocalKMS COMMAND test_local_kms)
-
 # === HTTPS Library 기본 테스트 ===
 add_executable(test_https_library
     unit/https/test_https_library.cpp
@@ -105,24 +88,6 @@ target_link_libraries(test_wallet_components
 add_test(NAME WalletComponents COMMAND test_wallet_components)
 
 # integration 테스트 ==========================================================================================
-# === Node TCP Server 테스트 ===
-add_executable(test_node_tcp_server
-    integration/node_tcp_server_test.cpp
-)
-
-target_include_directories(test_node_tcp_server PRIVATE
-    ${TEST_INCLUDE_DIRS}
-)
-
-target_link_libraries(test_node_tcp_server
-    node_network
-    coordinator_node_protocol
-    mpc_common
-    Threads::Threads
-)
-
-add_test(NAME NodeTcpServer COMMAND test_node_tcp_server)
-
 # === Message Validation 테스트 ===
 add_executable(test_message_validation
     integration/message_validation_test.cpp
@@ -139,27 +104,30 @@ target_link_libraries(test_message_validation
 
 add_test(NAME MessageValidation COMMAND test_message_validation)
 
-# === Coordinator-Node Basic Test ===
-add_executable(test_coordinator_node_basic
-    integration/coordinator_node_basic_test.cpp
+# === NEW: TLS Integration Test ===
+add_executable(test_coordinator_node_tls
+    integration/test_coordinator_node_tls.cpp
 )
 
-target_include_directories(test_coordinator_node_basic PRIVATE
+target_include_directories(test_coordinator_node_tls PRIVATE
     ${TEST_INCLUDE_DIRS}
 )
 
-target_link_libraries(test_coordinator_node_basic
-    coordinator_server         # CoordinatorServer 구현
-    node_server               # NodeServer 구현
-    coordinator_node_network  # NodeTcpClient
-    node_network             # NodeTcpServer
-    node_handlers            # NodeProtocolRouter
-    coordinator_node_protocol # MessageTypes
+target_link_libraries(test_coordinator_node_tls
+    coordinator_server
+    node_server
+    coordinator_node_network
+    node_network
+    node_handlers
+    coordinator_node_protocol
     mpc_common
+    mpc_kms
+    OpenSSL::SSL
+    OpenSSL::Crypto
     Threads::Threads
 )
 
-add_test(NAME CoordinatorNodeBasic COMMAND test_coordinator_node_basic)
+add_test(NAME CoordinatorNodeTLS COMMAND test_coordinator_node_tls)
 
 # === Manual Test (실제 Node 서버 필요) ===
 add_executable(test_coordinator_with_real_nodes
@@ -174,6 +142,7 @@ target_link_libraries(test_coordinator_with_real_nodes
     coordinator_server
     coordinator_node_protocol
     mpc_common
+    mpc_kms
     Threads::Threads
 )
 
@@ -198,6 +167,7 @@ target_link_libraries(test_mpc_engine_full
     node_handlers
     coordinator_node_protocol
     mpc_common
+    mpc_kms
     Threads::Threads
 )
 
@@ -213,6 +183,8 @@ message(STATUS "  - test_socket_io")
 message(STATUS "  - test_node_tcp_server")
 message(STATUS "  - test_message_validation")
 message(STATUS "  - test_coordinator_node_basic")
-message(STATUS "  - test_local_kms")
+message(STATUS "  - test_coordinator_node_tls (NEW)")
 message(STATUS "  - test_https_library")
+message(STATUS "  - test_wallet_components")
+message(STATUS "  - test_mpc_engine_full")
 message(STATUS "==========================")

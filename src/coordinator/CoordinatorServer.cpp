@@ -1,11 +1,18 @@
 // src/coordinator/CoordinatorServer.cpp
 #include "coordinator/CoordinatorServer.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
+#include "common/kms/include/KMSManager.hpp"
+#include "common/config/ConfigManager.hpp"
+#include <fstream>
 #include <algorithm>
 #include <iostream>
 
 namespace mpc_engine::coordinator
 {
+    using namespace mpc_engine::network::tls;
+    using namespace mpc_engine::config;
+    using namespace mpc_engine::kms;
+
     std::unique_ptr<CoordinatorServer> CoordinatorServer::instance = nullptr;
     std::mutex CoordinatorServer::instance_mutex;
 
@@ -41,10 +48,59 @@ namespace mpc_engine::coordinator
 
     bool CoordinatorServer::InitializeWalletServer(
         const std::string& wallet_url,
-        const std::string& auth_token,
-        const TlsContext& tls_ctx
+        const std::string& auth_token
     ) {
         std::cout << "[CoordinatorServer] Initializing Wallet Server..." << std::endl;
+
+        // TLS Context 생성 (Wallet 통신용)
+        auto& kms = KMSManager::Instance();
+
+        // CA 인증서 로드
+        std::string tls_ca = ConfigManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
+        std::string ca_pem = kms.GetSecret(tls_ca);
+        if (ca_pem.empty()) {
+            std::cerr << "[CoordinatorServer] Failed to load CA certificate from KMS" << std::endl;
+            return false;
+        }
+
+        // Coordinator-Wallet 서버 인증서 로드
+        std::string coordinator_wallet_cert_path = ConfigManager::Instance().GetString("TLS_DOCKER_COORDINATOR_WALLET");
+        std::string coordinator_wallet_key_id = ConfigManager::Instance().GetString("TLS_KMS_COORDINATOR_WALLET_KEY_ID");
+
+        std::ifstream cert_file(coordinator_wallet_cert_path);
+        if (!cert_file) {
+            std::cerr << "[CoordinatorServer] Failed to read coordinator wallet certificate" << std::endl;
+            return false;
+        }
+        std::string certificate_pem((std::istreambuf_iterator<char>(cert_file)), std::istreambuf_iterator<char>());
+        std::string private_key_pem = kms.GetSecret(coordinator_wallet_key_id);
+
+        if (certificate_pem.empty() || private_key_pem.empty()) {
+            std::cerr << "[CoordinatorServer] Empty coordinator wallet certificate or key" << std::endl;
+            return false;
+        }
+
+        TlsContext tls_ctx;
+        TlsConfig config = TlsConfig::CreateSecureServerConfig(); // 서버 모드
+
+        if (!tls_ctx.Initialize(config)) {
+            std::cerr << "[CoordinatorServer] Failed to initialize TLS context" << std::endl;
+            return false;
+        }
+
+        if (!tls_ctx.LoadCA(ca_pem)) {
+            std::cerr << "[CoordinatorServer] Failed to load CA certificate" << std::endl;
+            return false;
+        }
+
+        CertificateData cert_data;
+        cert_data.certificate_pem = certificate_pem;
+        cert_data.private_key_pem = private_key_pem;
+
+        if (!tls_ctx.LoadCertificate(cert_data)) {
+            std::cerr << "[CoordinatorServer] Failed to load coordinator wallet certificate" << std::endl;
+            return false;
+        }
 
         if (!wallet_manager_.Initialize(wallet_url, auth_token, tls_ctx)) {
             std::cerr << "[CoordinatorServer] Failed to initialize Wallet Server" << std::endl;
@@ -124,8 +180,33 @@ namespace mpc_engine::coordinator
             return false;
         }
 
+        // Node별 인증서 정보 찾기
+        std::vector<std::string> node_ids = Config::GetStringArray("NODE_IDS");
+        std::vector<std::string> tls_cert_paths = Config::GetStringArray("TLS_CERT_PATHS");
+        std::vector<std::string> tls_kms_nodes_key_ids = Config::GetStringArray("TLS_KMS_NODES_KEY_IDS");
+
+        std::string certificate_path;
+        std::string private_key_id;
+        
+        bool found = false;
+        for (size_t i = 0; i < node_ids.size(); ++i) {
+            if (node_ids[i] == node_id) {
+                if (i < tls_cert_paths.size() && i < tls_kms_nodes_key_ids.size()) {
+                    certificate_path = tls_cert_paths[i];
+                    private_key_id = tls_kms_nodes_key_ids[i];
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if (!found) {
+            std::cerr << "Certificate configuration not found for node: " << node_id << std::endl;
+            return false;
+        }
+
         std::unique_ptr<network::NodeTcpClient> node_client 
-        = std::make_unique<network::NodeTcpClient>(node_id, address, port, platform, shard_index);
+        = std::make_unique<network::NodeTcpClient>(node_id, address, port, platform, shard_index, certificate_path, private_key_id);
         
         node_client->SetConnectedCallback([this](const std::string& node_id) 
         {

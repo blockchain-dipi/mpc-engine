@@ -3,6 +3,8 @@
 #include "NodeConnectionInfo.hpp"
 #include "protocols/coordinator_node/include/MessageTypes.hpp"
 #include "common/utils/queue/ThreadSafeQueue.hpp"
+#include "common/network/tls/include/TlsContext.hpp"
+#include "common/network/tls/include/TlsConnection.hpp"
 #include <memory>
 #include <mutex>
 #include <functional>
@@ -15,6 +17,7 @@ namespace mpc_engine::coordinator::network
 {
     using namespace protocol::coordinator_node;
     using namespace mpc_engine::node;
+    using namespace mpc_engine::network::tls;
     
     using NodeConnectedCallback = std::function<void(const std::string& node_id)>;
     using NodeDisconnectedCallback = std::function<void(const std::string& node_id)>;
@@ -39,6 +42,10 @@ namespace mpc_engine::coordinator::network
         NodeDisconnectedCallback disconnected_callback;
         NodeErrorCallback error_callback;
 
+        // TLS 관련
+        std::unique_ptr<TlsContext> tls_context;
+        std::unique_ptr<TlsConnection> tls_connection;
+
         // Send Queue: 여러 Handler가 요청을 큐잉
         std::unique_ptr<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>> send_queue;
         
@@ -59,7 +66,9 @@ namespace mpc_engine::coordinator::network
             const std::string& address, 
             uint16_t port,
             NodePlatformType platform,
-            uint32_t shard_index = 0);
+            uint32_t shard_index,
+            const std::string& certificate_path,
+            const std::string& private_key_id);
         ~NodeTcpClient();
 
         bool Connect();
@@ -90,8 +99,10 @@ namespace mpc_engine::coordinator::network
         bool IsValid() const { return connection_info.IsValid(); }
 
     private:
+        bool InitializeTlsContext();
         bool InitializeSocket();
         bool ConnectSocket();
+        bool EstablishTlsConnection();
         void CleanupSocket();
 
         void SendLoop();

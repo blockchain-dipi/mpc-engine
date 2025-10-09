@@ -1,6 +1,6 @@
 #!/bin/bash
 # scripts/generate_certs.sh
-# MPC Engine TLS 인증서 발급 스크립트
+# MPC Engine TLS 인증서 발급 스크립트 (환경 변수 기반)
 
 set -e
 
@@ -32,34 +32,110 @@ log_error() {
 CERT_DIR="./certs/generated"  # 발급 전용 임시 폴더
 CA_KEY_PASS="mpc-engine-ca-key"
 
-# 사용법 출력
+# 환경 변수 기본값 설정
+DEFAULT_DOMAIN_SUFFIX=".local"
+DEFAULT_DEPLOY_ENV="local"
+
+# 환경 변수 로드 함수
+load_environment_config() {
+    local env_name=${1:-$DEFAULT_DEPLOY_ENV}
+    local env_file="./env/.env.${env_name}"
+    
+    log_info "환경 설정 로드 중: $env_name"
+    
+    # 환경 파일 존재 확인
+    if [[ ! -f "$env_file" ]]; then
+        log_warn "환경 파일이 없습니다: $env_file"
+        log_info "기본값 사용: DEPLOY_ENV=$DEFAULT_DEPLOY_ENV, TLS_DOMAIN_SUFFIX=$DEFAULT_DOMAIN_SUFFIX"
+        export DEPLOY_ENV="$DEFAULT_DEPLOY_ENV"
+        export TLS_DOMAIN_SUFFIX="$DEFAULT_DOMAIN_SUFFIX"
+        return 0
+    fi
+    
+    # 환경 변수 로드
+    while IFS= read -r line; do
+        # 주석과 빈 줄 제외
+        if [[ $line =~ ^[[:space:]]*# ]] || [[ -z "${line// }" ]]; then
+            continue
+        fi
+        
+        # KEY=VALUE 형태만 처리
+        if [[ $line =~ ^[[:space:]]*([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+            
+            # 줄바꿈 문자 제거 (Windows/Unix 호환성)
+            value=$(echo "$value" | tr -d '\r\n' | xargs)
+            
+            # 필요한 환경 변수만 export
+            case "$key" in
+                "DEPLOY_ENV"|"TLS_DOMAIN_SUFFIX"|"TLS_COORDINATOR_FQDN"|"TLS_NODE_FQDNS"|"NODE_IDS")
+                    export "$key=$value"
+                    ;;
+            esac
+        fi
+    done < "$env_file"
+    
+    # 기본값 설정
+    export DEPLOY_ENV="${DEPLOY_ENV:-$DEFAULT_DEPLOY_ENV}"
+    export TLS_DOMAIN_SUFFIX="${TLS_DOMAIN_SUFFIX:-$DEFAULT_DOMAIN_SUFFIX}"
+    
+    log_success "환경 설정 로드 완료"
+    log_info "  DEPLOY_ENV: $DEPLOY_ENV"
+    log_info "  TLS_DOMAIN_SUFFIX: $TLS_DOMAIN_SUFFIX"
+    
+    # NODE_IDS 파싱 (선택적, 공백 제거)
+    if [[ -n "$NODE_IDS" ]]; then
+        IFS=',' read -ra NODE_ID_ARRAY <<< "$NODE_IDS"
+        # 각 노드 ID에서 공백과 줄바꿈 문자 제거
+        for i in "${!NODE_ID_ARRAY[@]}"; do
+            NODE_ID_ARRAY[i]=$(echo "${NODE_ID_ARRAY[i]}" | tr -d '\r\n' | xargs)
+        done
+        log_info "  NODE_IDS: ${NODE_ID_ARRAY[*]}"
+    fi
+}
+
+# 사용법 출력 (환경 지원 추가)
 show_usage() {
-    echo "사용법: $0 <target>"
+    echo "사용법: $0 <target> [environment]"
     echo ""
     echo "발급 명령어:"
-    echo "  all          - 모든 인증서 발급 (CA + coordinator + node1,2,3)"
-    echo "  ca           - CA 인증서만 발급"
-    echo "  coordinator  - Coordinator 서버 인증서 발급"
-    echo "  node1        - Node 1 서버 인증서 발급"
-    echo "  node2        - Node 2 서버 인증서 발급"
-    echo "  node3        - Node 3 서버 인증서 발급"
+    echo "  all [env]        - 모든 인증서 발급 (CA + coordinator + nodes)"
+    echo "  ca [env]         - CA 인증서만 발급"
+    echo "  coordinator [env] - Coordinator 서버 인증서 발급"
+    echo "  node1 [env]      - Node 1 서버 인증서 발급"
+    echo "  node2 [env]      - Node 2 서버 인증서 발급"
+    echo "  node3 [env]      - Node 3 서버 인증서 발급"
     echo ""
     echo "관리 명령어:"
-    echo "  info         - 발급된 인증서 정보 확인"
-    echo "  verify       - 인증서 유효성 검증"
-    echo "  copy <dir>   - 인증서를 지정된 디렉토리로 복사"
-    echo "  clean        - 발급 폴더 정리"
-    echo "  help         - 이 도움말 출력"
+    echo "  info             - 발급된 인증서 정보 확인"
+    echo "  verify           - 인증서 유효성 검증"
+    echo "  copy <dir>       - 인증서를 지정된 디렉토리로 복사"
+    echo "  clean            - 발급 폴더 정리"
+    echo "  help             - 이 도움말 출력"
     echo ""
-    echo "발급 예시:"
-    echo "  $0 all                    # 전체 인증서 발급"
-    echo "  $0 coordinator           # Coordinator만 발급"
-    echo "  $0 node1                 # Node 1만 발급"
+    echo "환경별 발급 예시:"
+    echo "  $0 all local                    # 로컬 개발 환경 (.local)"
+    echo "  $0 all dev                      # 개발 서버 환경 (.dev.mpc-engine.com)"
+    echo "  $0 all prod                     # 프로덕션 환경 (.mpc-engine.com)"
+    echo "  $0 coordinator staging          # 스테이징용 coordinator만"
     echo ""
     echo "배포 예시:"
     echo "  $0 copy certs/local      # 로컬 개발용으로 복사"
     echo "  $0 copy certs/dev        # 개발 서버용으로 복사"
     echo "  $0 copy /media/usb       # USB로 복사"
+    echo ""
+    echo "지원하는 환경:"
+    echo "  local   - 로컬 개발 환경 (기본값)"
+    echo "  dev     - 개발 서버 환경"
+    echo "  staging - 스테이징 환경"
+    echo "  prod    - 프로덕션 환경"
+    echo ""
+    echo "환경 설정 파일:"
+    echo "  ./env/.env.local    - 로컬 개발용"
+    echo "  ./env/.env.dev      - 개발 서버용"
+    echo "  ./env/.env.staging  - 스테이징용"
+    echo "  ./env/.env.prod     - 프로덕션용"
     echo ""
     echo "⚠️  발급된 인증서는 certs/generated/에 저장됩니다."
     echo "   필요한 환경으로 복사 후 발급 폴더를 정리하세요."
@@ -89,6 +165,8 @@ setup_directories() {
         echo "dev/" >> "$gitignore_file"
         echo "# staging/ - Git 제외 (스테이징용)" >> "$gitignore_file"
         echo "staging/" >> "$gitignore_file"
+        echo "# prod/ - Git 제외 (프로덕션용)" >> "$gitignore_file"
+        echo "prod/" >> "$gitignore_file"
         log_info ".gitignore 생성 완료"
     fi
 }
@@ -105,16 +183,20 @@ check_ca_exists() {
 # CA 인증서 발급
 generate_ca() {
     log_info "Root CA 인증서 발급 중..."
+    log_info "  환경: $DEPLOY_ENV"
+    log_info "  도메인 접미사: $TLS_DOMAIN_SUFFIX"
     
     # CA 개인키 생성
     openssl genpkey -algorithm RSA -out "$CERT_DIR/ca-key.pem" -pkcs8 -aes256 \
         -pass pass:$CA_KEY_PASS
     
-    # CA 인증서 생성
+    # CA 인증서 생성 (환경별 정보 포함)
+    local ca_common_name="MPC Engine Root CA ($DEPLOY_ENV)"
+    
     openssl req -new -x509 -key "$CERT_DIR/ca-key.pem" -sha256 -days 3650 \
         -out "$CERT_DIR/ca-cert.pem" \
         -passin pass:$CA_KEY_PASS \
-        -config <(cat << 'EOF'
+        -config <(cat << EOF
 [req]
 distinguished_name = req_distinguished_name
 x509_extensions = v3_ca
@@ -125,8 +207,8 @@ C = KR
 ST = Seoul
 L = Seoul
 O = MPC Engine Development
-OU = Security Team
-CN = MPC Engine Root CA
+OU = Security Team ($DEPLOY_ENV)
+CN = $ca_common_name
 
 [v3_ca]
 basicConstraints = critical,CA:TRUE
@@ -139,17 +221,39 @@ EOF
     log_success "Root CA 인증서 발급 완료"
     log_info "  CA 인증서: $CERT_DIR/ca-cert.pem"
     log_info "  CA 개인키: $CERT_DIR/ca-key.pem (암호: $CA_KEY_PASS)"
+    log_info "  CA CN: $ca_common_name"
 }
 
-# 서버 인증서 발급 (공통 함수)
+# 서버 인증서 발급 (환경 변수 기반)
 generate_server_cert() {
     local server_name=$1
-    local common_name="$server_name.local"
+    # 줄바꿈 문자 제거
+    server_name=$(echo "$server_name" | tr -d '\r\n' | xargs)
+    local common_name="$server_name$TLS_DOMAIN_SUFFIX"
     
     log_info "$server_name 서버 인증서 발급 중..."
+    log_info "  환경: $DEPLOY_ENV"
+    log_info "  FQDN: $common_name"
     
     # 서버 개인키 생성
     openssl genpkey -algorithm RSA -out "$CERT_DIR/$server_name-key.pem"
+    
+    # SAN 설정 (환경별)
+    local alt_names="DNS.1 = $common_name"
+    alt_names="$alt_names"$'\n'"DNS.2 = localhost"
+    alt_names="$alt_names"$'\n'"IP.1 = 127.0.0.1"
+    alt_names="$alt_names"$'\n'"IP.2 = ::1"
+    
+    # 추가 SAN (환경별로 다를 수 있음)
+    case "$DEPLOY_ENV" in
+        "local")
+            alt_names="$alt_names"$'\n'"DNS.3 = $server_name"
+            ;;
+        "dev"|"staging"|"prod")
+            alt_names="$alt_names"$'\n'"DNS.3 = $server_name.internal"
+            alt_names="$alt_names"$'\n'"DNS.4 = $server_name-service"
+            ;;
+    esac
     
     # CSR 생성
     openssl req -new -key "$CERT_DIR/$server_name-key.pem" \
@@ -165,7 +269,7 @@ C = KR
 ST = Seoul
 L = Seoul
 O = MPC Engine
-OU = $server_name Server
+OU = $server_name Server ($DEPLOY_ENV)
 CN = $common_name
 
 [v3_req]
@@ -174,10 +278,7 @@ keyUsage = nonRepudiation,digitalSignature,keyEncipherment
 subjectAltName = @alt_names
 
 [alt_names]
-DNS.1 = $common_name
-DNS.2 = localhost
-IP.1 = 127.0.0.1
-IP.2 = ::1
+$alt_names
 EOF
 )
     
@@ -194,16 +295,14 @@ keyUsage = nonRepudiation,digitalSignature,keyEncipherment
 subjectAltName = @alt_names
 
 [alt_names]
-DNS.1 = $common_name
-DNS.2 = localhost
-IP.1 = 127.0.0.1
-IP.2 = ::1
+$alt_names
 EOF
 )
     
     log_success "$server_name 서버 인증서 발급 완료"
     log_info "  인증서: $CERT_DIR/$server_name-cert.pem"
     log_info "  개인키: $CERT_DIR/$server_name-key.pem"
+    log_info "  CN: $common_name"
 }
 
 # Coordinator 인증서 발급
@@ -228,9 +327,11 @@ generate_node() {
     generate_server_cert "$node_id"
 }
 
-# 모든 인증서 발급
+# 모든 인증서 발급 (환경 설정 기반)
 generate_all() {
     log_info "=== 전체 인증서 발급 시작 ==="
+    log_info "환경: $DEPLOY_ENV"
+    log_info "도메인 접미사: $TLS_DOMAIN_SUFFIX"
     
     # 1. CA 발급
     if check_ca_exists; then
@@ -247,13 +348,44 @@ generate_all() {
         generate_ca
     fi
     
-    # 2. 서버 인증서들 발급
+    # 2. Coordinator 인증서 발급
     generate_server_cert "coordinator"
-    generate_server_cert "node1"
-    generate_server_cert "node2"
-    generate_server_cert "node3"
+    
+    # 3. Node 인증서들 발급 (NODE_IDS 환경 변수 기반 또는 기본값)
+    if [[ -n "$NODE_IDS" ]]; then
+        IFS=',' read -ra NODE_ID_ARRAY <<< "$NODE_IDS"
+        # 각 노드 ID에서 공백과 줄바꿈 문자 제거
+        for i in "${!NODE_ID_ARRAY[@]}"; do
+            NODE_ID_ARRAY[i]=$(echo "${NODE_ID_ARRAY[i]}" | tr -d '\r\n' | xargs)
+        done
+        for node_id in "${NODE_ID_ARRAY[@]}"; do
+            generate_server_cert "$node_id"
+        done
+    else
+        # 기본값: node1, node2, node3
+        generate_server_cert "node1"
+        generate_server_cert "node2"
+        generate_server_cert "node3"
+    fi
     
     log_success "=== 전체 인증서 발급 완료 ==="
+    log_info "발급된 FQDN 목록:"
+    log_info "  CA: MPC Engine Root CA ($DEPLOY_ENV)"
+    log_info "  Coordinator: coordinator$TLS_DOMAIN_SUFFIX"
+    
+    if [[ -n "$NODE_IDS" ]]; then
+        IFS=',' read -ra NODE_ID_ARRAY <<< "$NODE_IDS"
+        # 각 노드 ID에서 공백과 줄바꿈 문자 제거
+        for i in "${!NODE_ID_ARRAY[@]}"; do
+            NODE_ID_ARRAY[i]=$(echo "${NODE_ID_ARRAY[i]}" | tr -d '\r\n' | xargs)
+        done
+        for node_id in "${NODE_ID_ARRAY[@]}"; do
+            log_info "  Node: $node_id$TLS_DOMAIN_SUFFIX"
+        done
+    else
+        log_info "  Nodes: node1$TLS_DOMAIN_SUFFIX, node2$TLS_DOMAIN_SUFFIX, node3$TLS_DOMAIN_SUFFIX"
+    fi
+    
     show_deployment_guide
 }
 
@@ -266,6 +398,8 @@ show_cert_info() {
     
     log_info "=== 발급된 인증서 목록 ==="
     echo "📁 발급 디렉토리: $CERT_DIR"
+    echo "🌍 환경: ${DEPLOY_ENV:-unknown}"
+    echo "🏷️  도메인 접미사: ${TLS_DOMAIN_SUFFIX:-unknown}"
     echo "⚠️  임시 폴더입니다. 필요한 곳으로 복사하여 사용하세요."
     echo ""
     
@@ -276,16 +410,25 @@ show_cert_info() {
         
         # CA 인증서 정보 출력
         echo "  만료일: $(openssl x509 -in "$CERT_DIR/ca-cert.pem" -noout -enddate | cut -d= -f2)"
+        echo "  CN: $(openssl x509 -in "$CERT_DIR/ca-cert.pem" -noout -subject | sed 's/.*CN = //')"
         echo ""
     fi
     
     # 서버 인증서들 확인
-    for server in coordinator node1 node2 node3; do
-        if [[ -f "$CERT_DIR/$server-cert.pem" ]]; then
-            echo "🖥️  $server 서버:"
-            echo "  인증서: $server-cert.pem"
-            echo "  개인키: $server-key.pem"
-            echo "  만료일: $(openssl x509 -in "$CERT_DIR/$server-cert.pem" -noout -enddate | cut -d= -f2)"
+    for cert_file in "$CERT_DIR"/*-cert.pem; do
+        if [[ -f "$cert_file" ]]; then
+            local server_name=$(basename "$cert_file" -cert.pem)
+            echo "🖥️  $server_name 서버:"
+            echo "  인증서: $server_name-cert.pem"
+            echo "  개인키: $server_name-key.pem"
+            echo "  만료일: $(openssl x509 -in "$cert_file" -noout -enddate | cut -d= -f2)"
+            echo "  CN: $(openssl x509 -in "$cert_file" -noout -subject | sed 's/.*CN = //')"
+            
+            # SAN 정보 출력
+            local san_info=$(openssl x509 -in "$cert_file" -noout -text | grep -A1 "Subject Alternative Name" | tail -1 | sed 's/^ *//')
+            if [[ -n "$san_info" ]]; then
+                echo "  SAN: $san_info"
+            fi
             echo ""
         fi
     done
@@ -313,12 +456,13 @@ verify_certificates() {
     fi
     
     # 서버 인증서들 검증
-    for server in coordinator node1 node2 node3; do
-        if [[ -f "$CERT_DIR/$server-cert.pem" ]]; then
-            if openssl verify -CAfile "$CERT_DIR/ca-cert.pem" "$CERT_DIR/$server-cert.pem" > /dev/null 2>&1; then
-                log_success "$server 인증서 유효"
+    for cert_file in "$CERT_DIR"/*-cert.pem; do
+        if [[ -f "$cert_file" ]]; then
+            local server_name=$(basename "$cert_file" -cert.pem)
+            if openssl verify -CAfile "$CERT_DIR/ca-cert.pem" "$cert_file" > /dev/null 2>&1; then
+                log_success "$server_name 인증서 유효"
             else
-                log_error "$server 인증서 무효"
+                log_error "$server_name 인증서 무효"
                 return 1
             fi
         fi
@@ -327,35 +471,48 @@ verify_certificates() {
     log_success "모든 인증서 검증 완료"
 }
 
-# 배포 가이드 출력
+# 배포 가이드 출력 (환경별)
 show_deployment_guide() {
     echo ""
-    log_info "=== 인증서 배포 가이드 ==="
+    log_info "=== 인증서 배포 가이드 ($DEPLOY_ENV 환경) ==="
     echo "발급된 인증서를 사용할 환경으로 복사하세요:"
     echo ""
-    echo "📋 로컬 개발 환경:"
-    echo "  mkdir -p certs/local"
-    echo "  cp -r $CERT_DIR/* certs/local/"
-    echo ""
-    echo "📋 개발 서버 환경:"
-    echo "  mkdir -p certs/dev"  
-    echo "  cp -r $CERT_DIR/* certs/dev/"
-    echo ""
-    echo "📋 스테이징 환경:"
-    echo "  mkdir -p certs/staging"
-    echo "  cp -r $CERT_DIR/* certs/staging/"
-    echo ""
-    echo "📋 USB 복사 (프로덕션용):"
-    echo "  cp -r $CERT_DIR/* /media/usb/mpc-certs/"
-    echo ""
+    
+    case "$DEPLOY_ENV" in
+        "local")
+            echo "📋 로컬 개발 환경:"
+            echo "  $0 copy certs/local"
+            echo ""
+            ;;
+        "dev")
+            echo "📋 개발 서버 환경:"
+            echo "  $0 copy certs/dev"
+            echo "  scp -r certs/dev/* dev-server:/etc/mpc-engine/certs/"
+            echo ""
+            ;;
+        "staging")
+            echo "📋 스테이징 환경:"
+            echo "  $0 copy certs/staging"
+            echo "  kubectl create secret tls mpc-tls --cert=certs/staging/ --key=certs/staging/"
+            echo ""
+            ;;
+        "prod")
+            echo "📋 프로덕션 환경 (보안 주의):"
+            echo "  $0 copy /media/usb/mpc-certs/"
+            echo "  # USB로 각 서버에 수동 배포"
+            echo "  # KMS에 업로드 후 즉시 로컬 삭제"
+            echo ""
+            ;;
+    esac
+    
     echo "⚠️  중요: 복사 완료 후 발급 폴더 정리"
-    echo "  rm -rf $CERT_DIR"
+    echo "  $0 clean"
     echo ""
     log_warn "발급 폴더($CERT_DIR)는 임시용입니다."
     log_warn "필요한 곳으로 복사 후 보안을 위해 삭제하는 것을 권장합니다."
 }
 
-# 인증서 복사 헬퍼 함수 (선택적 사용)
+# 인증서 복사 헬퍼 함수
 copy_certificates() {
     local target_dir=$1
     
@@ -376,6 +533,12 @@ copy_certificates() {
     
     log_success "인증서 복사 완료: $target_dir"
     
+    # 환경 정보 파일 생성
+    echo "# 인증서 환경 정보" > "$target_dir/cert-env-info.txt"
+    echo "DEPLOY_ENV=${DEPLOY_ENV:-unknown}" >> "$target_dir/cert-env-info.txt"
+    echo "TLS_DOMAIN_SUFFIX=${TLS_DOMAIN_SUFFIX:-unknown}" >> "$target_dir/cert-env-info.txt"
+    echo "GENERATED_AT=$(date)" >> "$target_dir/cert-env-info.txt"
+    
     # 복사 후 발급 폴더 정리 여부 확인
     echo ""
     echo -n "발급 폴더($CERT_DIR)를 정리하시겠습니까? [y/N]: "
@@ -390,6 +553,21 @@ copy_certificates() {
 cleanup() {
     # CSR 파일 삭제
     rm -f "$CERT_DIR"/*.csr
+    
+    # Zone.Identifier 파일 삭제 (Windows 호환성)
+    find "$CERT_DIR" -name "*Zone.Identifier*" -delete 2>/dev/null || true
+    
+    # 공백이 포함된 잘못된 파일명 정리
+    find "$CERT_DIR" -name "* -*" -type f 2>/dev/null | while read -r file; do
+        if [[ -f "$file" ]]; then
+            # 공백 제거한 새 파일명
+            new_name=$(echo "$file" | sed 's/ -/-/g')
+            if [[ "$file" != "$new_name" ]]; then
+                log_warn "파일명 수정: $(basename "$file") -> $(basename "$new_name")"
+                mv "$file" "$new_name"
+            fi
+        fi
+    done
 }
 
 # 메인 로직
@@ -400,29 +578,37 @@ main() {
     fi
     
     local target=$1
+    local environment=${2:-$DEFAULT_DEPLOY_ENV}
+    
+    # 환경 설정 로드 (copy, clean, info, verify 제외)
+    case $target in
+        "copy"|"clean"|"info"|"list"|"verify"|"help"|"-h"|"--help")
+            # 이 명령들은 환경 로드 불필요
+            ;;
+        *)
+            load_environment_config "$environment"
+            setup_directories
+            ;;
+    esac
     
     case $target in
         "all")
-            setup_directories
             generate_all
             cleanup
             show_cert_info
             verify_certificates
             ;;
         "ca")
-            setup_directories
             generate_ca
             cleanup
             show_cert_info
             ;;
         "coordinator")
-            setup_directories
             generate_coordinator
             cleanup
             show_cert_info
             ;;
         "node1"|"node2"|"node3")
-            setup_directories
             generate_node "$target"
             cleanup
             show_cert_info

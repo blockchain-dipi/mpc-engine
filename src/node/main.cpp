@@ -1,7 +1,7 @@
 // src/node/main.cpp
 #include "NodeServer.hpp"
 #include "common/config/ConfigManager.hpp"
-#include "common/kms/include/KMSFactory.hpp"
+#include "common/kms/include/KMSManager.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include <iostream>
 #include <signal.h>
@@ -99,18 +99,22 @@ int main(int argc, char* argv[]) {
         std::vector<std::string> node_ids = Config::GetStringArray("NODE_IDS");
         std::vector<std::pair<std::string, uint16_t>> node_hosts = Config::GetNodeEndpoints("NODE_HOSTS");
         std::vector<std::string> platforms = Config::GetStringArray("NODE_PLATFORMS");
-        
-        std::string bind_address;
-        uint16_t bind_port = 0;
-        std::string platform;
-        bool found = false;
+        std::vector<std::string> tls_cert_paths = Config::GetStringArray("TLS_CERT_PATHS");
+        std::vector<std::string> tls_kms_nodes_key_ids = Config::GetStringArray("TLS_KMS_NODES_KEY_IDS");
 
+        // NodeConfig 설정
+        NodeConfig config;
+        config.node_id = node_id;
+
+        bool found = false;
         for (size_t i = 0; i < node_ids.size(); ++i) {
             if (node_ids[i] == node_id) {
                 if (i < node_hosts.size() && i < platforms.size()) {
-                    bind_address = node_hosts[i].first;
-                    bind_port = node_hosts[i].second;
-                    platform = platforms[i];
+                    config.bind_address = node_hosts[i].first;
+                    config.bind_port = node_hosts[i].second;
+                    config.platform_type = FromString(platforms[i]);
+                    config.certificate_path = tls_cert_paths[i];
+                    config.private_key_id = tls_kms_nodes_key_ids[i];
                     found = true;
                     break;
                 }
@@ -128,44 +132,27 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Node configuration:" << std::endl;
         std::cout << "  Node ID: " << node_id << std::endl;
-        std::cout << "  Platform: " << platform << std::endl;
-        std::cout << "  Bind Address: " << bind_address << ":" << bind_port << std::endl;
+        std::cout << "  Platform: " << mpc_engine::node::ToString(config.platform_type) << std::endl;
+        std::cout << "  Bind Address: " << config.bind_address << ":" << config.bind_port << std::endl;
         std::cout << std::endl;
 
-        // 🆕 KMS 초기화
+        // KMS 초기화
         std::cout << "=== KMS Initialization ===" << std::endl;
-        
+
         std::string kms_config_path;
-        if (platform == "LOCAL" || platform == "local") {
+        if (config.platform_type == NodePlatformType::LOCAL) {
             kms_config_path = Config::GetString("NODE_LOCAL_KMS_PATH");
         }
-        // 나중에 AWS, Azure 등 추가
-        
-        auto kms = KMSFactory::Create(platform, kms_config_path);
-        if (!kms->Initialize()) {
-            std::cerr << "Failed to initialize KMS" << std::endl;
-            return 1;
-        }
+        KMSManager::InitializeLocal(NodePlatformType::UNKNOWN, kms_config_path); // 기본값 설정
         std::cout << "✓ KMS initialized successfully" << std::endl;
-        std::cout << std::endl;
 
         // NodeServer 생성
-        NodePlatformType platform_type = FromString(platform);
-        NodeServer node_server(platform_type);
+        NodeServer node_server(config);
         g_node_server = &node_server;
 
         // 시그널 핸들러
         signal(SIGINT, SignalHandler);
         signal(SIGTERM, SignalHandler);
-
-        // NodeConfig 설정
-        NodeConfig config;
-        config.node_id = node_id;
-        config.bind_address = bind_address;
-        config.bind_port = bind_port;
-        config.platform_type = platform_type;
-
-        node_server.SetNodeConfig(config);
 
         // 서버 초기화
         if (!node_server.Initialize()) {

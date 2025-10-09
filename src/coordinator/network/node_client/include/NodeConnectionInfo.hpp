@@ -13,6 +13,9 @@ namespace mpc_engine::coordinator::network
         
         mpc_engine::node::NodePlatformType platform;
         uint32_t shard_index = 0;
+
+        std::string certificate_path;
+        std::string private_key_id;
         
         std::atomic<ConnectionStatus> status{ConnectionStatus::DISCONNECTED};
         uint64_t connection_attempt_time = 0;

@@ -91,32 +91,11 @@ namespace mpc_engine::coordinator
         std::vector<std::string> GetNodesByStatus(ConnectionStatus status) const;
         std::vector<std::string> GetNodesByShardIndex(uint32_t shard_index) const;
 
-        /**
-         * @brief Wallet Server 초기화
-         * 
-         * @param wallet_url Wallet Server URL
-         * @param auth_token Authorization token
-         * @param tls_ctx TLS Context (KMS에서 CA 로드 완료)
-         * @return 성공 여부
-         */
-        bool InitializeWalletServer(
-            const std::string& wallet_url,
-            const std::string& auth_token,
-            const TlsContext& tls_ctx
-        );
+        bool InitializeWalletServer(const std::string& wallet_url, const std::string& auth_token);
 
-        /**
-         * @brief Wallet에 서명 요청 전송
-         * 
-         * @param request WalletSigningRequest
-         * @return WalletSigningResponse (실패 시 nullptr)
-         */
         std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
-        SendToWallet(const protocol::coordinator_wallet::WalletSigningRequest& request);
+            SendToWallet(const protocol::coordinator_wallet::WalletSigningRequest& request);
 
-        /**
-         * @brief Wallet Server 초기화 여부
-         */
         bool IsWalletServerInitialized() const;
 
     private:

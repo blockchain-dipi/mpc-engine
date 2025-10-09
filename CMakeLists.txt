@@ -1,4 +1,4 @@
-# CMakeLists.txt (루트)
+# CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 project(mpc-engine)
 
@@ -7,15 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_options(-Wall -Wextra -pedantic -pthread)
 
-# 🆕 OpenSSL 추가
 find_package(OpenSSL REQUIRED)
-
-# 🆕 nlohmann/json 추가
 find_package(nlohmann_json 3.2.0)
 if(NOT nlohmann_json_FOUND)
     include(FetchContent)
     FetchContent_Declare(json
         URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_MakeAvailable(json)
 endif()
@@ -31,11 +29,9 @@ add_library(mpc_common STATIC
     src/common/config/EnvConfig.cpp
     src/common/config/ConfigManager.cpp
     src/common/types/NodePlatformType.cpp
-    # HTTPS 라이브러리 추가
     src/common/https/src/HttpWriter.cpp
     src/common/https/src/HttpsClient.cpp
     src/common/https/src/HttpsConnectionPool.cpp
-    # TLS 라이브러리 추가
     src/common/network/tls/src/TlsContext.cpp
     src/common/network/tls/src/TlsConnection.cpp
 )
@@ -47,18 +43,26 @@ target_link_libraries(mpc_common
     OpenSSL::Crypto
 )
 
-# === 🆕 KMS 라이브러리 ===
+# === KMS 라이브러리 ===
 add_library(mpc_kms STATIC
-    src/common/kms/src/LocalKMS.cpp
+    src/common/kms/src/KMSManager.cpp
     src/common/kms/src/AwsKMS.cpp
     src/common/kms/src/AzureKMS.cpp
-    src/common/kms/src/IbmKMS.cpp
     src/common/kms/src/GoogleKMS.cpp
-    src/common/kms/src/KMSFactory.cpp
+    src/common/kms/src/IbmKMS.cpp
+    src/common/kms/src/LocalKMS.cpp
 )
 
 target_include_directories(mpc_kms PUBLIC src)
 target_link_libraries(mpc_kms mpc_common)
+
+# === Coordinator-Node 프로토콜 (올바른 경로) ===
+add_library(coordinator_node_protocol STATIC
+    src/coordinator/handlers/node/src/SigningProtocol.cpp
+)
+
+target_include_directories(coordinator_node_protocol PUBLIC src)
+target_link_libraries(coordinator_node_protocol mpc_common)
 
 # === Wallet 프로토콜 ===
 add_library(coordinator_wallet_protocol STATIC
@@ -70,14 +74,6 @@ target_link_libraries(coordinator_wallet_protocol
     mpc_common
     nlohmann_json::nlohmann_json
 )
-
-# === Coordinator-Node 프로토콜 ===
-add_library(coordinator_node_protocol STATIC
-    src/coordinator/handlers/node/src/SigningProtocol.cpp
-)
-
-target_include_directories(coordinator_node_protocol PUBLIC src)
-target_link_libraries(coordinator_node_protocol mpc_common)
 
 # === Coordinator Wallet 핸들러 ===
 add_library(coordinator_wallet_handlers STATIC
@@ -126,6 +122,7 @@ target_include_directories(coordinator_node_network PUBLIC src)
 target_link_libraries(coordinator_node_network 
     mpc_common 
     coordinator_node_protocol
+    mpc_kms
     Threads::Threads
 )
 
@@ -158,6 +155,7 @@ target_link_libraries(node_server
     node_handlers
     mpc_common
     coordinator_node_protocol
+    mpc_kms
     Threads::Threads
 )
 
@@ -173,6 +171,7 @@ target_link_libraries(coordinator_server
     coordinator_node_protocol
     coordinator_wallet_protocol
     mpc_common
+    mpc_kms
     Threads::Threads
 )
 
@@ -197,20 +196,18 @@ target_link_libraries(coordinator
     mpc_kms
 )
 
-# === 테스트 (별도 파일) ===
+# === 테스트 ===
 option(BUILD_TESTS "Build unit tests" OFF)
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
 
-# === 설치 설정 ===
 install(TARGETS coordinator node DESTINATION bin)
 
-# === 빌드 정보 출력 ===
 message(STATUS "=== MPC Engine Build Configuration ===")
 message(STATUS "Building: coordinator and node executables")
-message(STATUS "KMS: Local (functional), AWS/Azure/IBM/Google (stubs)")
-message(STATUS "Wallet Network: HTTPS + Connection Pool")
+message(STATUS "KMS: Local (functional)")
+message(STATUS "TLS: mTLS enabled")
 message(STATUS "Build tests: ${BUILD_TESTS}")
 message(STATUS "=======================================")

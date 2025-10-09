@@ -17,8 +17,6 @@ namespace mpc_engine::network::tls
         TlsConfig config;
         config.mode = TlsMode::CLIENT;
         config.min_version = TlsVersion::TLS_1_2;
-        config.verify_peer = true;
-        config.require_client_cert = false;
         config.cipher_list = CipherSuites::STRONG_TLS_1_2;
         config.cipher_suites = CipherSuites::STRONG_TLS_1_3;
         return config;
@@ -29,26 +27,9 @@ namespace mpc_engine::network::tls
         TlsConfig config;
         config.mode = TlsMode::SERVER;
         config.min_version = TlsVersion::TLS_1_2;
-        config.verify_peer = false;
-        config.require_client_cert = false;
         config.cipher_list = CipherSuites::STRONG_TLS_1_2;
         config.cipher_suites = CipherSuites::STRONG_TLS_1_3;
         return config;
-    }
-
-    bool TlsConfig::Validate(std::string* error_msg) const 
-    {
-        // 서버 모드는 나중에 인증서가 필요하지만 초기화 시점에는 체크 안 함
-        // (LoadCertificate에서 체크)
-
-        if (require_client_cert && mode != TlsMode::SERVER) {
-            if (error_msg) {
-                *error_msg = "require_client_cert only valid in server mode";
-            }
-            return false;
-        }
-
-        return true;
     }
 
     // ========================================
@@ -101,12 +82,6 @@ namespace mpc_engine::network::tls
     {
         if (is_initialized) {
             std::cerr << "[TLS] Already initialized" << std::endl;
-            return false;
-        }
-
-        std::string error_msg;
-        if (!cfg.Validate(&error_msg)) {
-            std::cerr << "[TLS] Invalid config: " << error_msg << std::endl;
             return false;
         }
 
@@ -248,8 +223,8 @@ namespace mpc_engine::network::tls
             return nullptr;
         }
 
-        // 검증이 활성화되면 CA 필수
-        if (config.verify_peer && !has_ca) {
+        // CA 필수
+        if (!has_ca) {
             std::cerr << "[TLS] Peer verification requires CA" << std::endl;
             return nullptr;
         }
@@ -454,25 +429,16 @@ namespace mpc_engine::network::tls
 
     bool TlsContext::ConfigureVerification() 
     {
-        int mode = SSL_VERIFY_NONE;
-
-        if (config.verify_peer) {
-            mode = SSL_VERIFY_PEER;
-            
-            if (config.require_client_cert) {
-                mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
-            }
-        }
+        int mode = (config.mode == TlsMode::SERVER) 
+            ? SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT  // 서버: 클라이언트 인증서 필수
+            : SSL_VERIFY_PEER;                                   // 클라이언트: 서버 인증서 검증
 
         SSL_CTX_set_verify(ctx, mode, VerifyCallback);
         SSL_CTX_set_verify_depth(ctx, config.verify_depth);
 
-        std::cout << "[TLS] Verification mode set: " 
-                  << (config.verify_peer ? "ENABLED" : "DISABLED");
-        if (config.require_client_cert) {
-            std::cout << " (require client cert)";
-        }
-        std::cout << std::endl;
+        std::cout << "[TLS] mTLS verification enabled (mode: " 
+                  << (config.mode == TlsMode::CLIENT ? "CLIENT" : "SERVER") 
+                  << ")" << std::endl;
 
         return true;
     }

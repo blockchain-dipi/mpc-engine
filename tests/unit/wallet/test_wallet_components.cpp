@@ -212,7 +212,6 @@ bool TestManagerInitialization() {
     // TLS Context 생성
     TlsConfig tls_config;
     tls_config.mode = TlsMode::CLIENT;
-    tls_config.verify_peer = false;
     
     TlsContext tls_ctx;
     if (!tls_ctx.Initialize(tls_config)) {

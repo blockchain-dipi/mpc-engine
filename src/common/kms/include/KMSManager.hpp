@@ -1,47 +1,71 @@
 // src/common/kms/include/KMSManager.hpp
 #pragma once
-
+#include "IKeyManagementService.hpp"
 #include "LocalKMS.hpp"
+#include "AwsKMS.hpp"
+#include "AzureKMS.hpp"
+#include "IbmKMS.hpp"
+#include "GoogleKMS.hpp"
 #include "common/types/NodePlatformType.hpp"
-#include <memory>
-#include <mutex>
+#include <cassert>
 
 namespace mpc_engine::kms
 {
     using namespace mpc_engine::node;
-    
+
     class KMSManager 
     {
+    private:
+        static std::shared_ptr<IKeyManagementService> instance;
+        static std::once_flag initialized;
+        static NodePlatformType current_platform;
+
     public:
-        static std::shared_ptr<IKeyManagementService> GetInstance(NodePlatformType platform)
+        static void Initialize(NodePlatformType platform) 
         {
-            static std::once_flag initialized;
-            static std::shared_ptr<IKeyManagementService> instance;
-            
             std::call_once(initialized, [platform]() {
+                current_platform = platform;
                 switch (platform) {
                     case NodePlatformType::LOCAL:
                         instance = std::make_shared<LocalKMS>("./kms");
                         break;
-                    case NodePlatformType::AWS:
-                        // instance = std::make_shared<AWSKMS>();
-                        throw std::runtime_error("AWS KMS not implemented yet");
+                        case NodePlatformType::AWS:
+                        instance = std::make_shared<AwsKMS>();
+                        break;
                     case NodePlatformType::AZURE:
-                        // instance = std::make_shared<AzureKMS>();
-                        throw std::runtime_error("Azure KMS not implemented yet");
+                        instance = std::make_shared<AzureKMS>();
+                        break;
                     case NodePlatformType::IBM:
-                        // instance = std::make_shared<IBMKMS>();
-                        throw std::runtime_error("IBM KMS not implemented yet");
+                        instance = std::make_shared<IbmKMS>();
+                        break;
                     case NodePlatformType::GOOGLE:
-                        // instance = std::make_shared<GoogleKMS>();
-                        throw std::runtime_error("Google KMS not implemented yet");
+                        instance = std::make_shared<GoogleKMS>();
+                        break;
                     default:
-                        throw std::runtime_error("Unknown platform type");
+                        throw std::invalid_argument("Unsupported KMS platform");
+                        break;
                 }
                 instance->Initialize();
             });
-            
-            return instance;
+        }
+
+        static void InitializeLocal(NodePlatformType platform, const std::string& config_path) 
+        {
+            assert(platform == NodePlatformType::LOCAL);
+
+            std::call_once(initialized, [platform, config_path]() {
+                current_platform = platform;
+                instance = std::make_shared<LocalKMS>(config_path);
+              instance->Initialize();
+            });
+        }
+
+        static IKeyManagementService& Instance() 
+        {
+            if (!instance) {
+                throw std::runtime_error("KMSManager not initialized");
+            }
+            return *instance;
         }
     };
 }

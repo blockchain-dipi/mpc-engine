@@ -10,7 +10,7 @@
 
 namespace mpc_engine::utils
 {
-    // 🆕 Queue 연산 결과
+    // Queue 연산 결과
     enum class QueueResult 
     {
         SUCCESS = 0,      // 성공
@@ -19,7 +19,7 @@ namespace mpc_engine::utils
         FULL = 3          // Queue가 가득참 (TryPush에서만)
     };
 
-    // 🆕 결과를 문자열로 변환
+    // 결과를 문자열로 변환
     inline const char* ToString(QueueResult result) 
     {
         switch (result) {
@@ -59,7 +59,7 @@ namespace mpc_engine::utils
         ThreadSafeQueue(const ThreadSafeQueue&) = delete;
         ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
 
-        // 🆕 Push: Queue에 아이템 추가 (Queue가 가득 차면 대기)
+        // Push: Queue에 아이템 추가 (Queue가 가득 차면 대기)
         QueueResult Push(TElement item) 
         {
             std::unique_lock<std::mutex> lock(mutex);
@@ -78,7 +78,7 @@ namespace mpc_engine::utils
             return QueueResult::SUCCESS;
         }
 
-        // 🆕 TryPush: 타임아웃과 함께 Push 시도
+        // TryPush: 타임아웃과 함께 Push 시도
         QueueResult TryPush(TElement item, std::chrono::milliseconds timeout) 
         {
             std::unique_lock<std::mutex> lock(mutex);
@@ -98,7 +98,7 @@ namespace mpc_engine::utils
             return QueueResult::SUCCESS;
         }
 
-        // 🆕 Pop: Queue에서 아이템 꺼내기 (Queue가 비어있으면 대기)
+        // Pop: Queue에서 아이템 꺼내기 (Queue가 비어있으면 대기)
         QueueResult Pop(TElement& item) 
         {
             std::unique_lock<std::mutex> lock(mutex);
@@ -118,7 +118,7 @@ namespace mpc_engine::utils
             return QueueResult::SUCCESS;
         }
 
-        // 🆕 TryPop: 타임아웃과 함께 Pop 시도
+        // TryPop: 타임아웃과 함께 Pop 시도
         QueueResult TryPop(TElement& item, std::chrono::milliseconds timeout) 
         {
             std::unique_lock<std::mutex> lock(mutex);

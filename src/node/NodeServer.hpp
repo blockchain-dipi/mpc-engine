@@ -16,6 +16,8 @@ namespace mpc_engine::node
         NodePlatformType platform_type = NodePlatformType::LOCAL;
         std::string bind_address = "127.0.0.1";
         uint16_t bind_port = 8081;
+        std::string certificate_path;
+        std::string private_key_id;
 
         bool IsValid() const;
     };
@@ -41,7 +43,7 @@ namespace mpc_engine::node
         uint64_t start_time = 0;
 
     public:
-        NodeServer(NodePlatformType platform = NodePlatformType::LOCAL);
+        NodeServer(const NodeConfig& config);
         ~NodeServer();
 
         bool Initialize();
@@ -49,7 +51,6 @@ namespace mpc_engine::node
         void Stop();
         bool IsRunning() const;
 
-        void SetNodeConfig(const NodeConfig& config);
         // TCP 서버 접근 (방화벽 설정용)
         network::NodeTcpServer* GetTcpServer() { return tcp_server.get(); }
         
@@ -59,7 +60,7 @@ namespace mpc_engine::node
 
     private:
         void OnCoordinatorConnected(const network::NodeConnectionInfo& connection);
-        void OnCoordinatorDisconnected(const network::NodeConnectionInfo& connection);
+        void OnCoordinatorDisconnected(const network::NodeConnectionInfo::DisconnectionInfo& connection);
         protocol::coordinator_node::NetworkMessage ProcessMessage(const protocol::coordinator_node::NetworkMessage& message);
         void SetupCallbacks();
         

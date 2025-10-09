@@ -11,6 +11,7 @@
 
 namespace mpc_engine::coordinator::network
 {
+    using namespace mpc_engine::protocol::coordinator_wallet;    
     using namespace mpc_engine::network::tls;
 
     /**
@@ -49,8 +50,8 @@ namespace mpc_engine::coordinator::network
          * @param request WalletSigningRequest
          * @return WalletSigningResponse (실패 시 nullptr)
          */
-        std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
-        SendSigningRequest(const protocol::coordinator_wallet::WalletSigningRequest& request);
+        std::unique_ptr<WalletSigningResponse> 
+        SendSigningRequest(const WalletSigningRequest& request);
 
         /**
          * @brief 연결 정보 조회

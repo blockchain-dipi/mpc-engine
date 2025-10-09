@@ -33,9 +33,16 @@ namespace mpc_engine::node
                bind_port > 0 && !bind_address.empty();
     }
 
-    NodeServer::NodeServer(NodePlatformType platform) {
-        node_config.platform_type = platform;
-        node_config.node_id = ToString(platform) + "_node_" + std::to_string(utils::GetCurrentTimeMs());
+    NodeServer::NodeServer(const NodeConfig& config) {
+        if (!config.IsValid()) {
+            std::cerr << "Invalid node configuration provided" << std::endl;
+            return;
+        }
+        node_config = config;
+
+        std::cout << "Node configuration set: " << config.node_id 
+                  << " (" << ToString(config.platform_type) << ")" << std::endl;
+
         start_time = utils::GetCurrentTimeMs();
     }
 
@@ -57,7 +64,7 @@ namespace mpc_engine::node
         uint16_t handler_threads = Config::GetUInt16("NODE_HANDLER_THREADS");
         tcp_server = std::make_unique<network::NodeTcpServer>(node_config.bind_address, node_config.bind_port, handler_threads);
 
-        if (!tcp_server->Initialize()) {
+        if (!tcp_server->Initialize(node_config.certificate_path, node_config.private_key_id)) {
             return false;
         }
 
@@ -106,16 +113,6 @@ namespace mpc_engine::node
         return is_running.load();
     }
 
-    void NodeServer::SetNodeConfig(const NodeConfig& config) {
-        if (!config.IsValid()) {
-            std::cerr << "Invalid node configuration provided" << std::endl;
-            return;
-        }
-        node_config = config;
-        std::cout << "Node configuration set: " << config.node_id 
-                  << " (" << ToString(config.platform_type) << ")" << std::endl;
-    }
-
     std::string NodeServer::GetNodeId() const {
         return node_config.node_id;
     }
@@ -144,9 +141,9 @@ namespace mpc_engine::node
                   << ": " << connection.ToString() << std::endl;
     }
 
-    void NodeServer::OnCoordinatorDisconnected(const network::NodeConnectionInfo& connection) {
+    void NodeServer::OnCoordinatorDisconnected(const network::NodeConnectionInfo::DisconnectionInfo& connection) {
         std::cout << "Coordinator disconnected from node " << node_config.node_id 
-                  << ": " << connection.ToString() << std::endl;
+                  << ": " << connection.coordinator_address << std::endl;
     }
 
     protocol::coordinator_node::NetworkMessage NodeServer::ProcessMessage(const protocol::coordinator_node::NetworkMessage& message) {
@@ -190,7 +187,7 @@ namespace mpc_engine::node
             OnCoordinatorConnected(info);
         });
 
-        tcp_server->SetDisconnectedHandler([this](const network::NodeConnectionInfo& info) {
+        tcp_server->SetDisconnectedHandler([this](const network::NodeConnectionInfo::DisconnectionInfo& info) {
             OnCoordinatorDisconnected(info);
         });
 
