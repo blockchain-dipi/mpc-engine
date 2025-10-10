@@ -128,7 +128,7 @@ namespace mpc_engine::node
                   << ": " << connection.coordinator_address << std::endl;
     }
 
-    protocol::coordinator_node::NetworkMessage NodeServer::ProcessMessage(const protocol::coordinator_node::NetworkMessage& message) {
+    NetworkMessage NodeServer::ProcessMessage(const NetworkMessage& message) {
         std::cout << "Node " << node_config.node_id << " processing message type: " 
                   << message.header.message_type << std::endl;
 
@@ -142,7 +142,7 @@ namespace mpc_engine::node
 
             // Protocol Router를 통해 처리
             auto response = handlers::NodeProtocolRouter::Instance().ProcessMessage(
-                static_cast<protocol::coordinator_node::MessageType>(message.header.message_type), 
+                static_cast<MessageType>(message.header.message_type), 
                 request.get()
             );
 
@@ -173,14 +173,14 @@ namespace mpc_engine::node
             OnCoordinatorDisconnected(info);
         });
 
-        tcp_server->SetMessageHandler([this](const protocol::coordinator_node::NetworkMessage& msg) {
+        tcp_server->SetMessageHandler([this](const NetworkMessage& msg) {
             return ProcessMessage(msg);
         });
         
         std::cout << "Node server callbacks configured" << std::endl;
     }
 
-    std::unique_ptr<protocol::coordinator_node::BaseRequest> NodeServer::ConvertToBaseRequest(const protocol::coordinator_node::NetworkMessage& message) {
+    std::unique_ptr<BaseRequest> NodeServer::ConvertToBaseRequest(const NetworkMessage& message) {
         using namespace protocol::coordinator_node;
         
         MessageType msgType = static_cast<MessageType>(message.header.message_type);
@@ -220,7 +220,7 @@ namespace mpc_engine::node
         }
     }
 
-    protocol::coordinator_node::NetworkMessage NodeServer::ConvertToNetworkMessage(const protocol::coordinator_node::BaseResponse& response) {
+    NetworkMessage NodeServer::ConvertToNetworkMessage(const BaseResponse& response) {
         // 응답을 간단한 페이로드로 변환
         std::string payload = "success=" + std::string(response.success ? "true" : "false");
         
@@ -229,9 +229,9 @@ namespace mpc_engine::node
         }
         
         // SigningResponse 특별 처리
-        if (response.messageType == protocol::coordinator_node::MessageType::SIGNING_REQUEST) {
-            const protocol::coordinator_node::SigningResponse* signingResponse = 
-                dynamic_cast<const protocol::coordinator_node::SigningResponse*>(&response);
+        if (response.messageType == MessageType::SIGNING_REQUEST) {
+            const SigningResponse* signingResponse = 
+                dynamic_cast<const SigningResponse*>(&response);
             if (signingResponse && signingResponse->success) {
                 payload += "|signature=" + signingResponse->signature;
                 payload += "|keyId=" + signingResponse->keyId;
@@ -239,14 +239,14 @@ namespace mpc_engine::node
             }
         }
         
-        return protocol::coordinator_node::NetworkMessage(
+        return NetworkMessage(
             static_cast<uint16_t>(response.messageType), 
             payload
         );
     }
 
-    protocol::coordinator_node::NetworkMessage NodeServer::CreateErrorResponse(uint16_t messageType, const std::string& errorMessage) {
+    NetworkMessage NodeServer::CreateErrorResponse(uint16_t messageType, const std::string& errorMessage) {
         std::string payload = "success=false|error=" + errorMessage;
-        return protocol::coordinator_node::NetworkMessage(messageType, payload);
+        return NetworkMessage(messageType, payload);
     }
 }

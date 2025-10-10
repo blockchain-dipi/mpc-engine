@@ -9,6 +9,8 @@
 
 namespace mpc_engine::node
 {    
+    using namespace protocol::coordinator_node;
+
     struct NodeConfig 
     {
         std::string node_id;
@@ -60,12 +62,12 @@ namespace mpc_engine::node
     private:
         void OnCoordinatorConnected(const network::NodeConnectionInfo& connection);
         void OnCoordinatorDisconnected(const network::NodeConnectionInfo::DisconnectionInfo& connection);
-        protocol::coordinator_node::NetworkMessage ProcessMessage(const protocol::coordinator_node::NetworkMessage& message);
+        NetworkMessage ProcessMessage(const NetworkMessage& message);
         void SetupCallbacks();
         
         // 누락된 메서드 선언들 추가
-        std::unique_ptr<protocol::coordinator_node::BaseRequest> ConvertToBaseRequest(const protocol::coordinator_node::NetworkMessage& message);
-        protocol::coordinator_node::NetworkMessage ConvertToNetworkMessage(const protocol::coordinator_node::BaseResponse& response);
-        protocol::coordinator_node::NetworkMessage CreateErrorResponse(uint16_t messageType, const std::string& errorMessage);
+        std::unique_ptr<BaseRequest> ConvertToBaseRequest(const NetworkMessage& message);
+        NetworkMessage ConvertToNetworkMessage(const BaseResponse& response);
+        NetworkMessage CreateErrorResponse(uint16_t messageType, const std::string& errorMessage);
     };
 }
