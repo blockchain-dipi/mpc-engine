@@ -5,7 +5,6 @@
 #include "common/utils/queue/ThreadSafeQueue.hpp"
 #include "common/network/tls/include/TlsConnection.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
-#include "common/types/NodePlatformType.hpp"
 #include "protocols/coordinator_node/include/MessageTypes.hpp"
 #include "NodeConnectionInfo.hpp"
 #include <functional>

@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace mpc_engine::config
+namespace mpc_engine::env
 {
     bool EnvConfig::LoadFromFile(const std::string& file_path) 
     {
@@ -247,4 +247,4 @@ namespace mpc_engine::config
         
         return false;
     }
-} // namespace mpc_engine::config
+} // namespace mpc_engine::env

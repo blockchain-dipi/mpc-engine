@@ -5,5 +5,5 @@ namespace mpc_engine::kms {
     // 정적 멤버 변수 정의
     std::shared_ptr<IKeyManagementService> KMSManager::instance = nullptr;
     std::once_flag KMSManager::initialized;
-    NodePlatformType KMSManager::current_platform = NodePlatformType::UNKNOWN;
+    PlatformType KMSManager::current_platform = PlatformType::UNKNOWN;
 }

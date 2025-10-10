@@ -32,7 +32,7 @@ namespace mpc_engine::coordinator::network
     std::string NodeConnectionInfo::ToString() const {
         std::ostringstream oss;
         oss << "NodeConnection[id=" << node_id 
-            << ", platform=" << mpc_engine::node::ToString(platform)
+            << ", platform=" << PlatformTypeToString(platform)
             << ", endpoint=" << GetEndpoint()
             << ", shard=" << shard_index
             << ", status=";

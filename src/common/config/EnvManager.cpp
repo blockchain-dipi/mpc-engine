@@ -1,33 +1,33 @@
-// src/common/config/ConfigManager.cpp
-#include "ConfigManager.hpp"
+// src/common/config/EnvManager.cpp
+#include "EnvManager.hpp"
 #include <iostream>
 #include <stdexcept>
 
-namespace mpc_engine::config
+namespace mpc_engine::env
 {
     // 정적 멤버 초기화
-    std::unique_ptr<ConfigManager> ConfigManager::instance = nullptr;
-    std::mutex ConfigManager::instance_mutex;
+    std::unique_ptr<EnvManager> EnvManager::instance = nullptr;
+    std::mutex EnvManager::instance_mutex;
 
-    ConfigManager& ConfigManager::Instance() 
+    EnvManager& EnvManager::Instance() 
     {
         std::lock_guard<std::mutex> lock(instance_mutex);
         
         if (!instance) {
             // make_unique는 private 생성자로 인해 사용 불가
             // new를 직접 사용
-            instance = std::unique_ptr<ConfigManager>(new ConfigManager());
+            instance = std::unique_ptr<EnvManager>(new EnvManager());
         }
         
         return *instance;
     }
 
-    bool ConfigManager::Initialize(const std::string& env_type) 
+    bool EnvManager::Initialize(const std::string& env_type) 
     {
         std::lock_guard<std::mutex> lock(config_mutex);
         
         if (is_initialized) {
-            std::cout << "ConfigManager already initialized. Current env: " 
+            std::cout << "EnvManager already initialized. Current env: " 
                       << env_config->GetEnvType() << ", Requested: " << env_type << std::endl;
             return env_config->GetEnvType() == env_type;
         }
@@ -41,88 +41,88 @@ namespace mpc_engine::config
         }
 
         is_initialized = true;
-        std::cout << "✓ ConfigManager initialized with environment: " << env_type << std::endl;
+        std::cout << "✓ EnvManager initialized with environment: " << env_type << std::endl;
         return true;
     }
 
-    bool ConfigManager::IsInitialized() const 
+    bool EnvManager::IsInitialized() const 
     {
         std::lock_guard<std::mutex> lock(config_mutex);
         return is_initialized;
     }
 
-    const EnvConfig& ConfigManager::GetConfig() const 
+    const EnvConfig& EnvManager::GetConfig() const 
     {
         EnsureInitialized();
         return *env_config;
     }
 
-    void ConfigManager::EnsureInitialized() const 
+    void EnvManager::EnsureInitialized() const 
     {
         std::lock_guard<std::mutex> lock(config_mutex);
         if (!is_initialized || !env_config) {
             throw std::runtime_error(
-                "ConfigManager not initialized. Call ConfigManager::Instance().Initialize(env_type) first."
+                "EnvManager not initialized. Call EnvManager::Instance().Initialize(env_type) first."
             );
         }
     }
 
-    std::string ConfigManager::GetString(const std::string& key) const 
+    std::string EnvManager::GetString(const std::string& key) const 
     {
         return GetConfig().GetString(key);
     }
 
-    uint16_t ConfigManager::GetUInt16(const std::string& key) const 
+    uint16_t EnvManager::GetUInt16(const std::string& key) const 
     {
         return GetConfig().GetUInt16(key);
     }
 
-    uint32_t ConfigManager::GetUInt32(const std::string& key) const 
+    uint32_t EnvManager::GetUInt32(const std::string& key) const 
     {
         return GetConfig().GetUInt32(key);
     }
 
-    bool ConfigManager::GetBool(const std::string& key) const 
+    bool EnvManager::GetBool(const std::string& key) const 
     {
         return GetConfig().GetBool(key);
     }
 
-    std::vector<std::string> ConfigManager::GetStringArray(const std::string& key) const 
+    std::vector<std::string> EnvManager::GetStringArray(const std::string& key) const 
     {
         return GetConfig().GetStringArray(key);
     }
 
-    std::vector<uint16_t> ConfigManager::GetUInt16Array(const std::string& key) const 
+    std::vector<uint16_t> EnvManager::GetUInt16Array(const std::string& key) const 
     {
         return GetConfig().GetUInt16Array(key);
     }
 
-    std::vector<std::pair<std::string, uint16_t>> ConfigManager::GetNodeEndpoints(const std::string& key) const 
+    std::vector<std::pair<std::string, uint16_t>> EnvManager::GetNodeEndpoints(const std::string& key) const 
     {
         return GetConfig().GetNodeEndpoints(key);
     }
 
-    bool ConfigManager::HasKey(const std::string& key) const 
+    bool EnvManager::HasKey(const std::string& key) const 
     {
         return GetConfig().HasKey(key);
     }
 
-    std::string ConfigManager::GetEnvType() const 
+    std::string EnvManager::GetEnvType() const 
     {
         return GetConfig().GetEnvType();
     }
 
-    void ConfigManager::ValidateRequired(const std::vector<std::string>& required_keys) const 
+    void EnvManager::ValidateRequired(const std::vector<std::string>& required_keys) const 
     {
         GetConfig().ValidateRequired(required_keys);
     }
 
-    bool ConfigManager::Reload() 
+    bool EnvManager::Reload() 
     {
         std::lock_guard<std::mutex> lock(config_mutex);
         
         if (!is_initialized || !env_config) {
-            std::cerr << "Cannot reload: ConfigManager not initialized" << std::endl;
+            std::cerr << "Cannot reload: EnvManager not initialized" << std::endl;
             return false;
         }
 
@@ -141,10 +141,10 @@ namespace mpc_engine::config
         return true;
     }
 
-    void ConfigManager::PrintLoadedConfig() const 
+    void EnvManager::PrintLoadedConfig() const 
     {
         if (!IsInitialized()) {
-            std::cout << "ConfigManager not initialized" << std::endl;
+            std::cout << "EnvManager not initialized" << std::endl;
             return;
         }
 
@@ -167,4 +167,4 @@ namespace mpc_engine::config
         std::cout << "=============================" << std::endl;
     }
 
-} // namespace mpc_engine::config
+} // namespace mpc_engine::env

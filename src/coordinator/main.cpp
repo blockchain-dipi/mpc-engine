@@ -1,6 +1,6 @@
 // src/coordinator/main.cpp
 #include "CoordinatorServer.hpp"
-#include "common/config/ConfigManager.hpp"
+#include "common/config/EnvManager.hpp"
 #include "common/types/BasicTypes.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/kms/include/KMSException.hpp"
@@ -16,9 +16,10 @@
 #include <chrono>
 #include <vector>
 
+using namespace mpc_engine;
 using namespace mpc_engine::coordinator;
 using namespace mpc_engine::node;
-using namespace mpc_engine::config;
+using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
 using namespace mpc_engine::network::tls;
 using namespace mpc_engine::protocol::coordinator_node;
@@ -83,7 +84,7 @@ int main(int argc, char* argv[])
     std::cout << "Loading environment: " << env_type << std::endl;
     
     // 환경 설정 로드
-    if (!ConfigManager::Instance().Initialize(env_type)) {
+    if (!EnvManager::Instance().Initialize(env_type)) {
         std::cerr << "Failed to load environment: " << env_type << std::endl;
         return 1;
     }
@@ -115,15 +116,15 @@ int main(int argc, char* argv[])
         // 1. KMS 초기화
         // ========================================
         std::string platform_type = Config::GetString("COORDINATOR_PLATFORM");
-        NodePlatformType platform = FromString(platform_type);
+        PlatformType platform = PlatformTypeFromString(platform_type);
         std::cout << "\n=== KMS Initialization ===" << std::endl;
         std::cout << "Coordinator Platform: " << platform_type << std::endl;
         
         std::string kms_config_path;
-        if (platform == NodePlatformType::LOCAL) {
+        if (platform == PlatformType::LOCAL) {
             kms_config_path = Config::GetString("COORDINATOR_LOCAL_KMS_PATH");
         }
-        KMSManager::InitializeLocal(NodePlatformType::UNKNOWN, kms_config_path);
+        KMSManager::InitializeLocal(PlatformType::UNKNOWN, kms_config_path);
         std::cout << "✓ KMS initialized successfully" << std::endl;
         
         // ========================================
@@ -195,9 +196,9 @@ int main(int argc, char* argv[])
             std::cout << "    - " << node_id << " (" << node_platform << ") at " 
                       << endpoint.first << ":" << endpoint.second 
                       << " [shard " << shard_index << "]" << std::endl;
-            
-            NodePlatformType platform_type = FromString(node_platform);
-            
+
+            PlatformType platform_type = PlatformTypeFromString(node_platform);
+
             if (!coordinator.RegisterNode(node_id, platform_type, endpoint.first, endpoint.second, shard_index)) {
                 std::cerr << "Failed to register node: " << node_id << std::endl;
                 return 1;

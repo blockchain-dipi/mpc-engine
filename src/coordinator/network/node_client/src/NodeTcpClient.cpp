@@ -2,7 +2,7 @@
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/utils/threading/ThreadUtils.hpp"
 #include "common/kms/include/KMSManager.hpp"
-#include "common/config/ConfigManager.hpp"
+#include "common/config/EnvManager.hpp"
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -13,7 +13,7 @@
 namespace mpc_engine::coordinator::network
 {
     using namespace mpc_engine::kms;
-    using namespace mpc_engine::config;
+    using namespace mpc_engine::env;
 
     constexpr uint32_t THREAD_JOIN_TIMEOUT_MS = 5000;  // 5초
 
@@ -21,7 +21,7 @@ namespace mpc_engine::coordinator::network
         const std::string& node_id, 
         const std::string& address, 
         uint16_t port,
-        NodePlatformType platform,
+        PlatformType platform,
         uint32_t shard_index,
         const std::string& certificate_path,
         const std::string& private_key_id
@@ -57,7 +57,7 @@ namespace mpc_engine::coordinator::network
             auto& kms = KMSManager::Instance();
         
             // 1. CA 인증서 로드 (서버 인증서 검증용)
-            std::string tls_ca = ConfigManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
+            std::string tls_ca = EnvManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
             std::string ca_pem = kms.GetSecret(tls_ca);
             if (ca_pem.empty()) {
                 std::cerr << "[NodeTcpClient] Failed to load CA certificate from KMS" << std::endl;
@@ -395,8 +395,8 @@ namespace mpc_engine::coordinator::network
             tls_config.read_timeout_ms = 30000;
             tls_config.write_timeout_ms = 30000;
             tls_config.enable_sni = true;
-            std::string deploy_env = ConfigManager::Instance().GetString("DEPLOY_ENV");
-            std::string domain_suffix = ConfigManager::Instance().GetString("TLS_DOMAIN_SUFFIX");
+            std::string deploy_env = EnvManager::Instance().GetString("DEPLOY_ENV");
+            std::string domain_suffix = EnvManager::Instance().GetString("TLS_DOMAIN_SUFFIX");
             tls_config.sni_hostname = connection_info.node_id + domain_suffix;
             
             std::cout << "[NodeTcpClient] Establishing TLS connection to " 

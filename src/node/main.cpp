@@ -1,17 +1,20 @@
 // src/node/main.cpp
 #include "NodeServer.hpp"
-#include "common/config/ConfigManager.hpp"
+#include "common/config/EnvManager.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/kms/include/KMSException.hpp"
+#include "common/types/BasicTypes.hpp"
 #include <iostream>
 #include <signal.h>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
 
+using namespace mpc_engine;
 using namespace mpc_engine::node;
-using namespace mpc_engine::config;
+using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
+using namespace mpc_engine::node::network;
 
 // 전역 상태 관리 (시그널 핸들러용)
 static NodeServer* g_node_server = nullptr;
@@ -80,7 +83,7 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
 
     // 환경 설정 로드
-    if (!ConfigManager::Instance().Initialize(env_type)) {
+    if (!EnvManager::Instance().Initialize(env_type)) {
         std::cerr << "Failed to load environment: " << env_type << std::endl;
         return 1;
     }
@@ -112,7 +115,7 @@ int main(int argc, char* argv[]) {
                 if (i < node_hosts.size() && i < platforms.size()) {
                     config.bind_address = node_hosts[i].first;
                     config.bind_port = node_hosts[i].second;
-                    config.platform_type = FromString(platforms[i]);
+                    config.platform_type = PlatformTypeFromString(platforms[i]);
                     config.certificate_path = tls_cert_paths[i];
                     config.private_key_id = tls_kms_nodes_key_ids[i];
                     found = true;
@@ -132,7 +135,7 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Node configuration:" << std::endl;
         std::cout << "  Node ID: " << node_id << std::endl;
-        std::cout << "  Platform: " << mpc_engine::node::ToString(config.platform_type) << std::endl;
+        std::cout << "  Platform: " << PlatformTypeToString(config.platform_type) << std::endl;
         std::cout << "  Bind Address: " << config.bind_address << ":" << config.bind_port << std::endl;
         std::cout << std::endl;
 
@@ -140,10 +143,10 @@ int main(int argc, char* argv[]) {
         std::cout << "=== KMS Initialization ===" << std::endl;
 
         std::string kms_config_path;
-        if (config.platform_type == NodePlatformType::LOCAL) {
+        if (config.platform_type == PlatformType::LOCAL) {
             kms_config_path = Config::GetString("NODE_LOCAL_KMS_PATH");
         }
-        KMSManager::InitializeLocal(NodePlatformType::UNKNOWN, kms_config_path); // 기본값 설정
+        KMSManager::InitializeLocal(PlatformType::UNKNOWN, kms_config_path); // 기본값 설정
         std::cout << "✓ KMS initialized successfully" << std::endl;
 
         // NodeServer 생성
@@ -161,7 +164,7 @@ int main(int argc, char* argv[]) {
         }
 
         // 보안 설정
-        network::NodeTcpServer* tcp_server = node_server.GetTcpServer();
+        NodeTcpServer* tcp_server = node_server.GetTcpServer();
         if (tcp_server) {
             std::string trusted_ip = Config::GetString("TRUSTED_COORDINATOR_IP");
             tcp_server->SetTrustedCoordinator(trusted_ip);
@@ -181,7 +184,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  Node Server Running" << std::endl;
         std::cout << "========================================" << std::endl;
         std::cout << "  Node ID: " << node_server.GetNodeId() << std::endl;
-        std::cout << "  Platform: " << ToString(node_server.GetPlatformType()) << std::endl;
+        std::cout << "  Platform: " << PlatformTypeToString(node_server.GetPlatformType()) << std::endl;
         std::cout << "  Listening: " << config.bind_address << ":" << config.bind_port << std::endl;
         std::cout << "  Trusted Coordinator: " << Config::GetString("TRUSTED_COORDINATOR_IP") << std::endl;
         if (tcp_server) {

@@ -56,7 +56,7 @@ namespace mpc_engine::coordinator
         bool IsRunning() const;
 
         bool RegisterNode(const std::string& node_id,
-            mpc_engine::node::NodePlatformType platform,
+            PlatformType platform,
             const std::string& address,
             uint16_t port,
             uint32_t shard_index = 0);
@@ -81,13 +81,13 @@ namespace mpc_engine::coordinator
         size_t GetTotalNodeCount() const;
 
         std::string GetNodeAddress(const std::string& node_id) const;
-        mpc_engine::node::NodePlatformType GetNodePlatform(const std::string& node_id) const;
+        PlatformType GetNodePlatform(const std::string& node_id) const;
         uint32_t GetNodeShardIndex(const std::string& node_id) const;
         std::string GetNodeEndpoint(const std::string& node_id) const;
 
         CoordinatorStats GetStats() const;
 
-        std::vector<std::string> GetNodesByPlatform(mpc_engine::node::NodePlatformType platform) const;
+        std::vector<std::string> GetNodesByPlatform(PlatformType platform) const;
         std::vector<std::string> GetNodesByStatus(ConnectionStatus status) const;
         std::vector<std::string> GetNodesByShardIndex(uint32_t shard_index) const;
 

@@ -1,7 +1,6 @@
 // src/node/NodeServer.hpp
 #pragma once
 #include "common/types/BasicTypes.hpp"
-#include "common/types/NodePlatformType.hpp"
 #include "node/network/include/NodeTcpServer.hpp"
 #include "protocols/coordinator_node/include/MessageTypes.hpp"
 #include <memory>
@@ -9,11 +8,11 @@
 #include <atomic>
 
 namespace mpc_engine::node
-{
+{    
     struct NodeConfig 
     {
         std::string node_id;
-        NodePlatformType platform_type = NodePlatformType::LOCAL;
+        PlatformType platform_type = PlatformType::LOCAL;
         std::string bind_address = "127.0.0.1";
         uint16_t bind_port = 8081;
         std::string certificate_path;
@@ -25,7 +24,7 @@ namespace mpc_engine::node
     struct NodeStats 
     {
         std::string node_id;
-        NodePlatformType platform_type;
+        PlatformType platform_type;
         ConnectionStatus status;
         uint32_t total_requests = 0;
         uint32_t successful_requests = 0;
@@ -55,7 +54,7 @@ namespace mpc_engine::node
         network::NodeTcpServer* GetTcpServer() { return tcp_server.get(); }
         
         std::string GetNodeId() const;
-        NodePlatformType GetPlatformType() const;
+        PlatformType GetPlatformType() const;
         NodeStats GetStats() const;
 
     private:

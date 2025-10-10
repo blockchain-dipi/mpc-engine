@@ -1,11 +1,11 @@
-// src/common/config/ConfigManager.hpp
+// src/common/config/EnvManager.hpp
 #pragma once
 #include "EnvConfig.hpp"
 #include <memory>
 #include <mutex>
 #include <string>
 
-namespace mpc_engine::config
+namespace mpc_engine::env
 {
     /**
      * @brief 글로벌 설정 관리자 (싱글톤)
@@ -13,10 +13,10 @@ namespace mpc_engine::config
      * 전체 애플리케이션에서 하나의 설정 인스턴스를 공유하여
      * 일관성과 메모리 효율성을 보장합니다.
      */
-    class ConfigManager 
+    class EnvManager 
     {
     private:
-        static std::unique_ptr<ConfigManager> instance;
+        static std::unique_ptr<EnvManager> instance;
         static std::mutex instance_mutex;
         
         std::unique_ptr<EnvConfig> env_config;
@@ -25,21 +25,21 @@ namespace mpc_engine::config
         bool is_initialized = false;
         
         // 생성자를 private으로 하여 외부 생성 방지
-        ConfigManager() = default;
+        EnvManager() = default;
 
     public:
-        ~ConfigManager() = default;
+        ~EnvManager() = default;
         
         // 복사/이동 방지
-        ConfigManager(const ConfigManager&) = delete;
-        ConfigManager& operator=(const ConfigManager&) = delete;
-        ConfigManager(ConfigManager&&) = delete;
-        ConfigManager& operator=(ConfigManager&&) = delete;
+        EnvManager(const EnvManager&) = delete;
+        EnvManager& operator=(const EnvManager&) = delete;
+        EnvManager(EnvManager&&) = delete;
+        EnvManager& operator=(EnvManager&&) = delete;
 
         /**
          * @brief 싱글톤 인스턴스 획득
          */
-        static ConfigManager& Instance();
+        static EnvManager& Instance();
 
         /**
          * @brief 환경 설정 초기화
@@ -94,58 +94,58 @@ namespace mpc_engine::config
     /**
      * @brief 전역 설정 접근을 위한 편의 함수들
      * 
-     * ConfigManager::Instance().GetString(key) 대신
+     * EnvManager::Instance().GetString(key) 대신
      * Config::GetString(key)로 간단하게 사용 가능
      */
     namespace Config 
     {
         inline const EnvConfig& Get() {
-            return ConfigManager::Instance().GetConfig();
+            return EnvManager::Instance().GetConfig();
         }
 
         inline std::string GetString(const std::string& key) {
-            return ConfigManager::Instance().GetString(key);
+            return EnvManager::Instance().GetString(key);
         }
 
         inline uint16_t GetUInt16(const std::string& key) {
-            return ConfigManager::Instance().GetUInt16(key);
+            return EnvManager::Instance().GetUInt16(key);
         }
 
         inline uint32_t GetUInt32(const std::string& key) {
-            return ConfigManager::Instance().GetUInt32(key);
+            return EnvManager::Instance().GetUInt32(key);
         }
 
         inline bool GetBool(const std::string& key) {
-            return ConfigManager::Instance().GetBool(key);
+            return EnvManager::Instance().GetBool(key);
         }
 
         inline std::vector<std::string> GetStringArray(const std::string& key) {
-            return ConfigManager::Instance().GetStringArray(key);
+            return EnvManager::Instance().GetStringArray(key);
         }
 
         inline std::vector<uint16_t> GetUInt16Array(const std::string& key) {
-            return ConfigManager::Instance().GetUInt16Array(key);
+            return EnvManager::Instance().GetUInt16Array(key);
         }
 
         inline std::vector<std::pair<std::string, uint16_t>> GetNodeEndpoints(const std::string& key) {
-            return ConfigManager::Instance().GetNodeEndpoints(key);
+            return EnvManager::Instance().GetNodeEndpoints(key);
         }
 
         inline bool HasKey(const std::string& key) {
-            return ConfigManager::Instance().HasKey(key);
+            return EnvManager::Instance().HasKey(key);
         }
 
         inline std::string GetEnvType() {
-            return ConfigManager::Instance().GetEnvType();
+            return EnvManager::Instance().GetEnvType();
         }
 
         inline void ValidateRequired(const std::vector<std::string>& required_keys) {
-            ConfigManager::Instance().ValidateRequired(required_keys);
+            EnvManager::Instance().ValidateRequired(required_keys);
         }
 
         inline bool IsInitialized() {
-            return ConfigManager::Instance().IsInitialized();
+            return EnvManager::Instance().IsInitialized();
         }
     }
 
-} // namespace mpc_engine::config
+} // namespace mpc_engine::env

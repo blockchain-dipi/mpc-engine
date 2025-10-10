@@ -11,7 +11,7 @@ namespace mpc_engine::coordinator::network
         uint16_t node_port = 0;
         std::string node_id;
         
-        mpc_engine::node::NodePlatformType platform;
+        PlatformType platform;
         uint32_t shard_index = 0;
 
         std::string certificate_path;

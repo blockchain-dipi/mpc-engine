@@ -1,7 +1,8 @@
 // tests/integration/test_coordinator_node_tls.cpp
 #include "coordinator/CoordinatorServer.hpp"
 #include "node/NodeServer.hpp"
-#include "common/config/ConfigManager.hpp"
+#include "common/config/EnvManager.hpp"
+#include "common/types/BasicTypes.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
@@ -13,9 +14,10 @@
 #include <future>
 #include <cassert>
 
+using namespace mpc_engine;
 using namespace mpc_engine::coordinator;
 using namespace mpc_engine::node;
-using namespace mpc_engine::config;
+using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
 using namespace mpc_engine::protocol::coordinator_node;
 
@@ -32,14 +34,14 @@ public:
         std::cout << "\n=== Setting up TLS Test Environment ===" << std::endl;
 
         // 1. Config 로드
-        if (!ConfigManager::Instance().Initialize("local")) {
+        if (!EnvManager::Instance().Initialize("local")) {
             std::cerr << "Failed to initialize config" << std::endl;
             return false;
         }
 
         // 2. KMS 초기화
         std::string kms_path = Config::GetString("NODE_LOCAL_KMS_PATH");
-        KMSManager::InitializeLocal(NodePlatformType::LOCAL, kms_path);
+        KMSManager::InitializeLocal(PlatformType::LOCAL, kms_path);
         std::cout << "✓ KMS initialized" << std::endl;
 
         // 3. TLS Global 초기화
@@ -58,7 +60,7 @@ public:
             config.node_id = node_ids[i];
             config.bind_address = node_hosts[i].first;
             config.bind_port = node_hosts[i].second;
-            config.platform_type = FromString(platforms[i]);
+            config.platform_type = PlatformTypeFromString(platforms[i]);
             config.certificate_path = tls_cert_paths[i];
             config.private_key_id = tls_kms_nodes_key_ids[i];
 
@@ -97,7 +99,7 @@ public:
         for (size_t i = 0; i < node_ids.size(); ++i) {
             if (!coordinator_server->RegisterNode(
                 node_ids[i],
-                FromString(platforms[i]),
+                PlatformTypeFromString(platforms[i]),
                 node_hosts[i].first,
                 node_hosts[i].second,
                 i

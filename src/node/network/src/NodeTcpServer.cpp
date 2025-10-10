@@ -1,6 +1,6 @@
 // src/node/network/src/NodeTcpServer.cpp
 #include "node/network/include/NodeTcpServer.hpp"
-#include "common/config/ConfigManager.hpp"
+#include "common/config/EnvManager.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/utils/firewall/KernelFirewall.hpp"
 #include "common/utils/threading/ThreadUtils.hpp"
@@ -13,7 +13,7 @@
 
 namespace mpc_engine::node::network
 {
-    using namespace mpc_engine::config;
+    using namespace mpc_engine::env;
     using namespace mpc_engine::kms;
 
     constexpr uint32_t THREAD_JOIN_TIMEOUT_MS = 5000;  // 5초
@@ -43,7 +43,7 @@ namespace mpc_engine::node::network
         auto& kms = KMSManager::Instance();
         try {
             // 1. CA 인증서 로드 (클라이언트 인증서 검증용) ← 추가 필요
-            std::string tls_ca = ConfigManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
+            std::string tls_ca = EnvManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
             std::string ca_pem = kms.GetSecret(tls_ca);
             if (ca_pem.empty()) {
                 std::cerr << "[NodeTcpServer] Failed to load CA certificate from KMS" << std::endl;

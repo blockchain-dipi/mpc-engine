@@ -65,7 +65,7 @@ namespace mpc_engine::coordinator::network
         NodeTcpClient(const std::string& node_id, 
             const std::string& address, 
             uint16_t port,
-            NodePlatformType platform,
+            PlatformType platform,
             uint32_t shard_index,
             const std::string& certificate_path,
             const std::string& private_key_id);
@@ -90,7 +90,7 @@ namespace mpc_engine::coordinator::network
         std::string GetNodeId() const { return connection_info.node_id; }
         std::string GetAddress() const { return connection_info.node_address; }
         uint16_t GetPort() const { return connection_info.node_port; }
-        NodePlatformType GetPlatform() const { return connection_info.platform; }
+        PlatformType GetPlatform() const { return connection_info.platform; }
         uint32_t GetShardIndex() const { return connection_info.shard_index; }
         std::string GetEndpoint() const { return connection_info.GetEndpoint(); }
         ConnectionStatus GetStatus() const { return connection_info.status; }

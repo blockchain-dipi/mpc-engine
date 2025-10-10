@@ -6,39 +6,37 @@
 #include "AzureKMS.hpp"
 #include "IbmKMS.hpp"
 #include "GoogleKMS.hpp"
-#include "common/types/NodePlatformType.hpp"
+#include "common/types/BasicTypes.hpp"
 #include <cassert>
 
 namespace mpc_engine::kms
 {
-    using namespace mpc_engine::node;
-
     class KMSManager 
     {
     private:
         static std::shared_ptr<IKeyManagementService> instance;
         static std::once_flag initialized;
-        static NodePlatformType current_platform;
+        static PlatformType current_platform;
 
     public:
-        static void Initialize(NodePlatformType platform) 
+        static void Initialize(PlatformType platform) 
         {
             std::call_once(initialized, [platform]() {
                 current_platform = platform;
                 switch (platform) {
-                    case NodePlatformType::LOCAL:
+                    case PlatformType::LOCAL:
                         instance = std::make_shared<LocalKMS>("./kms");
                         break;
-                        case NodePlatformType::AWS:
+                        case PlatformType::AWS:
                         instance = std::make_shared<AwsKMS>();
                         break;
-                    case NodePlatformType::AZURE:
+                    case PlatformType::AZURE:
                         instance = std::make_shared<AzureKMS>();
                         break;
-                    case NodePlatformType::IBM:
+                    case PlatformType::IBM:
                         instance = std::make_shared<IbmKMS>();
                         break;
-                    case NodePlatformType::GOOGLE:
+                    case PlatformType::GOOGLE:
                         instance = std::make_shared<GoogleKMS>();
                         break;
                     default:
@@ -49,9 +47,9 @@ namespace mpc_engine::kms
             });
         }
 
-        static void InitializeLocal(NodePlatformType platform, const std::string& config_path) 
+        static void InitializeLocal(PlatformType platform, const std::string& config_path) 
         {
-            assert(platform == NodePlatformType::LOCAL);
+            assert(platform == PlatformType::LOCAL);
 
             std::call_once(initialized, [platform, config_path]() {
                 current_platform = platform;

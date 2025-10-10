@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace mpc_engine::config
+namespace mpc_engine::env
 {
     // 설정 누락 예외
     class ConfigMissingException : public std::runtime_error {
@@ -54,4 +54,4 @@ namespace mpc_engine::config
     private:
         bool ParseLine(const std::string& line);
     };
-} // namespace mpc_engine::config
+} // namespace mpc_engine::env

@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cassert>
 
+using namespace mpc_engine;
 using namespace mpc_engine::coordinator;
 using namespace mpc_engine::node;
 using namespace mpc_engine::protocol::coordinator_node;
@@ -29,9 +30,9 @@ void TestBasicConnection() {
     
     // 실제 실행 중인 Node 서버들 등록
     std::cout << "Registering nodes..." << std::endl;
-    assert(coordinator.RegisterNode("node_1", NodePlatformType::LOCAL, "127.0.0.1", 8081, 0));
-    assert(coordinator.RegisterNode("node_2", NodePlatformType::LOCAL, "127.0.0.1", 8082, 1));
-    assert(coordinator.RegisterNode("node_3", NodePlatformType::LOCAL, "127.0.0.1", 8083, 2));
+    assert(coordinator.RegisterNode("node_1", PlatformType::LOCAL, "127.0.0.1", 8081, 0));
+    assert(coordinator.RegisterNode("node_2", PlatformType::LOCAL, "127.0.0.1", 8082, 1));
+    assert(coordinator.RegisterNode("node_3", PlatformType::LOCAL, "127.0.0.1", 8083, 2));
     std::cout << "✓ Nodes registered" << std::endl;
     
     // 연결

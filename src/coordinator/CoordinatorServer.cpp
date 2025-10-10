@@ -2,7 +2,7 @@
 #include "coordinator/CoordinatorServer.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/kms/include/KMSManager.hpp"
-#include "common/config/ConfigManager.hpp"
+#include "common/config/EnvManager.hpp"
 #include <fstream>
 #include <algorithm>
 #include <iostream>
@@ -10,7 +10,7 @@
 namespace mpc_engine::coordinator
 {
     using namespace mpc_engine::network::tls;
-    using namespace mpc_engine::config;
+    using namespace mpc_engine::env;
     using namespace mpc_engine::kms;
 
     std::unique_ptr<CoordinatorServer> CoordinatorServer::instance = nullptr;
@@ -56,7 +56,7 @@ namespace mpc_engine::coordinator
         auto& kms = KMSManager::Instance();
 
         // CA 인증서 로드
-        std::string tls_ca = ConfigManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
+        std::string tls_ca = EnvManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
         std::string ca_pem = kms.GetSecret(tls_ca);
         if (ca_pem.empty()) {
             std::cerr << "[CoordinatorServer] Failed to load CA certificate from KMS" << std::endl;
@@ -64,8 +64,8 @@ namespace mpc_engine::coordinator
         }
 
         // Coordinator-Wallet 서버 인증서 로드
-        std::string coordinator_wallet_cert_path = ConfigManager::Instance().GetString("TLS_DOCKER_COORDINATOR_WALLET");
-        std::string coordinator_wallet_key_id = ConfigManager::Instance().GetString("TLS_KMS_COORDINATOR_WALLET_KEY_ID");
+        std::string coordinator_wallet_cert_path = EnvManager::Instance().GetString("TLS_DOCKER_COORDINATOR_WALLET");
+        std::string coordinator_wallet_key_id = EnvManager::Instance().GetString("TLS_KMS_COORDINATOR_WALLET_KEY_ID");
 
         std::ifstream cert_file(coordinator_wallet_cert_path);
         if (!cert_file) {
@@ -161,7 +161,7 @@ namespace mpc_engine::coordinator
 
     bool CoordinatorServer::RegisterNode(
         const std::string& node_id,
-        mpc_engine::node::NodePlatformType platform,
+        PlatformType platform,
         const std::string& address,
         uint16_t port,
         uint32_t shard_index) 
@@ -221,7 +221,7 @@ namespace mpc_engine::coordinator
         node_clients[node_id] = std::move(node_client);
         
         std::cout << "Node registered: " << node_id << " at " << address << ":" << port 
-                  << " (platform: " << mpc_engine::node::ToString(platform) 
+                  << " (platform: " << PlatformTypeToString(platform) 
                   << ", shard: " << shard_index << ")" << std::endl;
         
         return true;
@@ -410,10 +410,10 @@ namespace mpc_engine::coordinator
         return client ? client->GetAddress() : "";
     }
 
-    mpc_engine::node::NodePlatformType CoordinatorServer::GetNodePlatform(const std::string& node_id) const 
+    PlatformType CoordinatorServer::GetNodePlatform(const std::string& node_id) const 
     {
         network::NodeTcpClient* client = FindNodeClientInternal(node_id);
-        return client ? client->GetPlatform() : mpc_engine::node::NodePlatformType::UNKNOWN;
+        return client ? client->GetPlatform() : PlatformType::UNKNOWN;
     }
 
     uint32_t CoordinatorServer::GetNodeShardIndex(const std::string& node_id) const 
@@ -450,7 +450,7 @@ namespace mpc_engine::coordinator
         return stats;
     }
 
-    std::vector<std::string> CoordinatorServer::GetNodesByPlatform(mpc_engine::node::NodePlatformType platform) const 
+    std::vector<std::string> CoordinatorServer::GetNodesByPlatform(PlatformType platform) const 
     {
         std::lock_guard<std::mutex> lock(nodes_mutex);
         std::vector<std::string> result;

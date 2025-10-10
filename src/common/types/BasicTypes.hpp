@@ -36,4 +36,32 @@ namespace mpc_engine
         SOCKET_CREATE_ERROR = 8,
         INVALID_ADDRESS = 9
     };
+
+    enum class PlatformType 
+    {
+        LOCAL = 0,
+        AWS,
+        AZURE,
+        IBM,
+        GOOGLE,
+        UNKNOWN = 99
+    };
+
+    inline std::string PlatformTypeToString(PlatformType type) {
+        switch (type) {
+            case PlatformType::LOCAL: return "LOCAL";
+            case PlatformType::AWS: return "AWS";
+            case PlatformType::IBM: return "IBM";
+            case PlatformType::AZURE: return "AZURE";
+            default: return "UNKNOWN";
+        }
+    }
+
+    inline PlatformType PlatformTypeFromString(const std::string& str) {
+        if (str == "LOCAL" || str == "local") return PlatformType::LOCAL;
+        if (str == "AWS" || str == "aws") return PlatformType::AWS;
+        if (str == "IBM" || str == "ibm") return PlatformType::IBM;
+        if (str == "AZURE" || str == "azure") return PlatformType::AZURE;
+        return PlatformType::UNKNOWN;
+    }
 }

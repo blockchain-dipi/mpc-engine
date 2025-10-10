@@ -57,7 +57,7 @@ public:
         config.node_id = node_id_;
         config.bind_address = "127.0.0.1";
         config.bind_port = port_;
-        config.platform_type = NodePlatformType::LOCAL;
+        config.platform_type = PlatformType::LOCAL;
        
         server_ = std::make_unique<NodeServer>(config);
         
@@ -115,7 +115,7 @@ public:
     bool RegisterNode(const std::string& node_id, uint16_t port, uint32_t shard_index) {
         return coordinator_.RegisterNode(
             node_id, 
-            NodePlatformType::LOCAL, 
+            PlatformType::LOCAL, 
             "127.0.0.1", 
             port, 
             shard_index

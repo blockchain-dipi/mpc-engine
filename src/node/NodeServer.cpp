@@ -1,6 +1,6 @@
 // src/node/NodeServer.cpp
 #include "node/NodeServer.hpp"
-#include "common/config/ConfigManager.hpp"
+#include "common/config/EnvManager.hpp"
 #include "node/handlers/include/NodeProtocolRouter.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
@@ -8,28 +8,10 @@
 
 namespace mpc_engine::node
 {
-    using namespace mpc_engine::config;
-    
-    std::string ToString(NodePlatformType type) {
-        switch (type) {
-            case NodePlatformType::LOCAL: return "LOCAL";
-            case NodePlatformType::AWS: return "AWS";
-            case NodePlatformType::IBM: return "IBM";
-            case NodePlatformType::AZURE: return "AZURE";
-            default: return "UNKNOWN";
-        }
-    }
-
-    NodePlatformType FromString(const std::string& str) {
-        if (str == "LOCAL" || str == "local") return NodePlatformType::LOCAL;
-        if (str == "AWS" || str == "aws") return NodePlatformType::AWS;
-        if (str == "IBM" || str == "ibm") return NodePlatformType::IBM;
-        if (str == "AZURE" || str == "azure") return NodePlatformType::AZURE;
-        return NodePlatformType::UNKNOWN;
-    }
+    using namespace mpc_engine::env;
 
     bool NodeConfig::IsValid() const {
-        return !node_id.empty() && platform_type != NodePlatformType::UNKNOWN &&
+        return !node_id.empty() && platform_type != PlatformType::UNKNOWN &&
                bind_port > 0 && !bind_address.empty();
     }
 
@@ -41,7 +23,7 @@ namespace mpc_engine::node
         node_config = config;
 
         std::cout << "Node configuration set: " << config.node_id 
-                  << " (" << ToString(config.platform_type) << ")" << std::endl;
+                  << " (" << PlatformTypeToString(config.platform_type) << ")" << std::endl;
 
         start_time = utils::GetCurrentTimeMs();
     }
@@ -117,7 +99,7 @@ namespace mpc_engine::node
         return node_config.node_id;
     }
 
-    NodePlatformType NodeServer::GetPlatformType() const {
+    PlatformType NodeServer::GetPlatformType() const {
         return node_config.platform_type;
     }
 
