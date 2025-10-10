@@ -457,13 +457,8 @@ namespace mpc_engine::node::network
             } catch (const std::runtime_error& e) {
                 std::cerr << "[ERROR] Failed to submit task (pool stopped): " << e.what() << std::endl;
 
-                NetworkMessage error_response = CreateErrorResponse(
-                    request.header.message_type,
-                    "Server shutting down"
-                );
-
                 utils::QueueResult result = send_queue->TryPush(
-                    error_response, 
+                    CreateErrorResponse(request.header.message_type, "Server shutting down", -1),
                     std::chrono::milliseconds(100)
                 );
 
@@ -477,13 +472,8 @@ namespace mpc_engine::node::network
             } catch (const std::exception& e) {
                 std::cerr << "[ERROR] Failed to submit task: " << e.what() << std::endl;
 
-                NetworkMessage error_response = CreateErrorResponse(
-                    request.header.message_type,
-                    "Server busy"
-                );
-
                 utils::QueueResult result = send_queue->TryPush(
-                    error_response, 
+                    CreateErrorResponse(request.header.message_type, "Server busy", -1),
                     std::chrono::milliseconds(100)
                 );
 
@@ -557,14 +547,12 @@ namespace mpc_engine::node::network
             if (validation != ValidationResult::OK) {
                 std::cerr << "[ERROR] Invalid request in handler: " << ToString(validation) << std::endl;
 
-                NetworkMessage error_response = CreateErrorResponse(
-                    context->request.header.message_type,
-                    std::string("Invalid request: ") + ToString(validation)
-                );
-                error_response.header.request_id = request_id;
-
                 utils::QueueResult result = context->send_queue->TryPush(
-                    error_response, 
+                    CreateErrorResponse(
+                        context->request.header.message_type, 
+                        std::string("Invalid request: ") + ToString(validation),
+                        request_id
+                    ),
                     std::chrono::milliseconds(100)
                 );
 
@@ -578,14 +566,12 @@ namespace mpc_engine::node::network
             if (!context->handler) {
                 std::cerr << "[ERROR] Handler is null" << std::endl;
 
-                NetworkMessage error_response = CreateErrorResponse(
-                    context->request.header.message_type,
-                    "Handler not configured"
-                );
-                error_response.header.request_id = request_id;
-
                 utils::QueueResult result = context->send_queue->TryPush(
-                    error_response, 
+                    CreateErrorResponse(
+                        context->request.header.message_type,
+                        "Handler not configured",
+                        request_id
+                    ), 
                     std::chrono::milliseconds(100)
                 );
 
@@ -603,7 +589,7 @@ namespace mpc_engine::node::network
 
             // 5. 응답 전송
             utils::QueueResult result = context->send_queue->TryPush(
-                response, 
+                std::move(response), 
                 std::chrono::milliseconds(5000)
             );
 
@@ -616,14 +602,12 @@ namespace mpc_engine::node::network
 
             // 예외 발생 시에도 에러 응답 시도
             try {
-                NetworkMessage error_response = CreateErrorResponse(
-                    context->request.header.message_type,
-                    "Internal error"
-                );
-                error_response.header.request_id = request_id;
-
                 context->send_queue->TryPush(
-                    error_response, 
+                    CreateErrorResponse(
+                        context->request.header.message_type,
+                        "Internal error",
+                        request_id
+                    ),
                     std::chrono::milliseconds(100)
                 );
             } catch (...) {
@@ -806,10 +790,11 @@ namespace mpc_engine::node::network
     }
     
     // 에러 응답 생성 헬퍼
-    NetworkMessage NodeTcpServer::CreateErrorResponse(uint16_t original_message_type, const std::string& error_message)
+    NetworkMessage NodeTcpServer::CreateErrorResponse(uint16_t original_message_type, const std::string& error_message, uint64_t request_id)
     {
         std::string payload = "success=false|error=" + error_message;
         NetworkMessage error_msg(original_message_type, payload);
+        error_msg.header.request_id = request_id;
         return error_msg;
     }
 }

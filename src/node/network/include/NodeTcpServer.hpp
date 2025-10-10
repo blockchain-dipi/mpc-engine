@@ -140,6 +140,6 @@ namespace mpc_engine::node::network
         
         bool SendMessage(const NetworkMessage& outMessage);
         bool ReceiveMessage(NetworkMessage& outMessage);
-        static NetworkMessage CreateErrorResponse(uint16_t original_message_type, const std::string& error_message);
+        static NetworkMessage CreateErrorResponse(uint16_t original_message_type, const std::string& error_message, uint64_t request_id);
     };
 }
