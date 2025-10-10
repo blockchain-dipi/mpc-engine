@@ -1,5 +1,5 @@
 // src/common/resource/src/GoogleReadOnlyResLoader.cpp
-#include "common/storage/include/GoogleReadOnlyResLoader.hpp"
+#include "common/resource/include/GoogleReadOnlyResLoader.hpp"
 #include <stdexcept>
 
 namespace mpc_engine::resource

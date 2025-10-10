@@ -1,5 +1,5 @@
 // src/common/resource/src/IBMReadOnlyResLoader.cpp
-#include "common/storage/include/IBMReadOnlyResLoader.hpp"
+#include "common/resource/include/IBMReadOnlyResLoader.hpp"
 #include <stdexcept>
 
 namespace mpc_engine::resource

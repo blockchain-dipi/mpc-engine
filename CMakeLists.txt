@@ -42,6 +42,19 @@ target_link_libraries(mpc_common
     OpenSSL::Crypto
 )
 
+# === Resource Loader 라이브러리 ===
+add_library(mpc_resource STATIC
+    src/common/resource/src/ReadOnlyResLoaderManager.cpp
+    src/common/resource/src/LocalReadOnlyResLoader.cpp
+    src/common/resource/src/AWSReadOnlyResLoader.cpp
+    src/common/resource/src/AzureReadOnlyResLoader.cpp
+    src/common/resource/src/IBMReadOnlyResLoader.cpp
+    src/common/resource/src/GoogleReadOnlyResLoader.cpp
+)
+
+target_include_directories(mpc_resource PUBLIC src)
+target_link_libraries(mpc_resource mpc_common)
+
 # === KMS 라이브러리 ===
 add_library(mpc_kms STATIC
     src/common/kms/src/KMSManager.cpp

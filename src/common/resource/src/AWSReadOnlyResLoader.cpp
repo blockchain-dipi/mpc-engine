@@ -1,5 +1,5 @@
 // src/common/resource/src/AWSReadOnlyResLoader.cpp
-#include "common/storage/include/AWSReadOnlyResLoader.hpp"
+#include "common/resource/include/AWSReadOnlyResLoader.hpp"
 #include <stdexcept>
 
 namespace mpc_engine::resource

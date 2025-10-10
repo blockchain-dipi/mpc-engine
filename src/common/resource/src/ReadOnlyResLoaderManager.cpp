@@ -1,10 +1,10 @@
 // src/common/resource/src/ReadOnlyResLoaderManager.cpp
-#include "common/storage/include/ReadOnlyResLoaderManager.hpp"
-#include "common/storage/include/LocalReadOnlyResLoader.hpp"
-#include "common/storage/include/AWSReadOnlyResLoader.hpp"
-#include "common/storage/include/AzureReadOnlyResLoader.hpp"
-#include "common/storage/include/IBMReadOnlyResLoader.hpp"
-#include "common/storage/include/GoogleReadOnlyResLoader.hpp"
+#include "common/resource/include/ReadOnlyResLoaderManager.hpp"
+#include "common/resource/include/LocalReadOnlyResLoader.hpp"
+#include "common/resource/include/AWSReadOnlyResLoader.hpp"
+#include "common/resource/include/AzureReadOnlyResLoader.hpp"
+#include "common/resource/include/IBMReadOnlyResLoader.hpp"
+#include "common/resource/include/GoogleReadOnlyResLoader.hpp"
 
 #include <stdexcept>
 #include <sstream>

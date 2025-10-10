@@ -1,5 +1,5 @@
 // src/common/resource/src/AzureReadOnlyResLoader.cpp
-#include "common/storage/include/AzureReadOnlyResLoader.hpp"
+#include "common/resource/include/AzureReadOnlyResLoader.hpp"
 #include <stdexcept>
 
 namespace mpc_engine::resource

@@ -1,5 +1,5 @@
 // src/common/resource/src/LocalReadOnlyResLoader.cpp
-#include "common/storage/include/LocalReadOnlyResLoader.hpp"
+#include "common/resource/include/LocalReadOnlyResLoader.hpp"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
