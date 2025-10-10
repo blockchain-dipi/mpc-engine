@@ -32,6 +32,8 @@ namespace mpc_engine::coordinator::network
     class NodeTcpClient 
     {
     private:
+        std::atomic<bool> is_initialized{false};
+        
         NodeConnectionInfo connection_info;
         mutable std::mutex client_mutex;
         
@@ -70,6 +72,9 @@ namespace mpc_engine::coordinator::network
             const std::string& certificate_path,
             const std::string& private_key_id);
         ~NodeTcpClient();
+
+        bool Initialize();
+        bool IsInitialized() const { return is_initialized.load(); }
 
         bool Connect();
         void Disconnect();

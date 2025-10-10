@@ -18,11 +18,42 @@ namespace mpc_engine::utils
         {
             void (*func)(TContext*);
             TContext* context;
-            bool owned;  // ✅ 소유권 플래그
+            bool owned;  // 소유권 플래그
             
+            Task() : func(nullptr), context(nullptr), owned(false) {}
+
+            Task(void (*f)(TContext*), TContext* c, bool o) 
+                : func(f), context(c), owned(o) {}
+
+            Task(Task&& other) noexcept : func(other.func), context(other.context), owned(other.owned)
+            {
+                other.context = nullptr;
+                other.owned = false;
+            }
+
+            Task& operator=(Task&& other) noexcept
+            {
+                if (this != &other) {
+                    if (owned && context) {
+                        delete context;
+                    }
+                    func = other.func;
+                    context = other.context;
+                    owned = other.owned;
+                    other.context = nullptr;
+                    other.owned = false;
+                }
+                return *this;
+            }
+
+            // 복사 금지
+            Task(const Task&) = delete;
+            Task& operator=(const Task&) = delete;
+
             ~Task() {
                 if (owned && context) {
-                    delete context;  // ✅ 자동 삭제
+                    delete context;
+                    context = nullptr;
                 }
             }
         };
@@ -77,16 +108,13 @@ namespace mpc_engine::utils
                 throw std::runtime_error("ThreadPool is stopped");
             }
         
-            Task task{func, raw_ptr, true};
-            
-            QueueResult result = task_queue.Push(std::move(task));
-            
+            QueueResult result = task_queue.Emplace(func, raw_ptr, true);
             if (result != QueueResult::SUCCESS) {
                 delete raw_ptr;
                 throw std::runtime_error("Failed to push task");
             }
         }
-    
+
         /**
          * @brief 작업 제출 (빌려줌)
          * 
@@ -100,11 +128,8 @@ namespace mpc_engine::utils
             if (stop) {
                 throw std::runtime_error("ThreadPool is stopped");
             }
-        
-            Task task{func, context, false};
-            
-            QueueResult result = task_queue.Push(std::move(task));
-            
+
+            QueueResult result = task_queue.Emplace(func, context, false);
             if (result != QueueResult::SUCCESS) {
                 throw std::runtime_error("Failed to push task");
             }

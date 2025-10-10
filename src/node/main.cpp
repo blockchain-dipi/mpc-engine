@@ -4,6 +4,7 @@
 #include "common/kms/include/KMSManager.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include "common/types/BasicTypes.hpp"
+#include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include <iostream>
 #include <signal.h>
 #include <atomic>
@@ -15,6 +16,7 @@ using namespace mpc_engine::node;
 using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
 using namespace mpc_engine::node::network;
+using namespace mpc_engine::resource;
 
 // 전역 상태 관리 (시그널 핸들러용)
 static NodeServer* g_node_server = nullptr;
@@ -103,7 +105,7 @@ int main(int argc, char* argv[]) {
         std::vector<std::pair<std::string, uint16_t>> node_hosts = Config::GetNodeEndpoints("NODE_HOSTS");
         std::vector<std::string> platforms = Config::GetStringArray("NODE_PLATFORMS");
         std::vector<std::string> tls_cert_paths = Config::GetStringArray("TLS_CERT_PATHS");
-        std::vector<std::string> tls_kms_nodes_key_ids = Config::GetStringArray("TLS_KMS_NODES_KEY_IDS");
+        std::vector<std::string> tls_kms_nodes_coordinator_key_ids = Config::GetStringArray("TLS_KMS_NODES_COORDINATOR_KEY_IDS");
 
         // NodeConfig 설정
         NodeConfig config;
@@ -117,7 +119,7 @@ int main(int argc, char* argv[]) {
                     config.bind_port = node_hosts[i].second;
                     config.platform_type = PlatformTypeFromString(platforms[i]);
                     config.certificate_path = tls_cert_paths[i];
-                    config.private_key_id = tls_kms_nodes_key_ids[i];
+                    config.private_key_id = tls_kms_nodes_coordinator_key_ids[i];
                     found = true;
                     break;
                 }
@@ -139,6 +141,9 @@ int main(int argc, char* argv[]) {
         std::cout << "  Bind Address: " << config.bind_address << ":" << config.bind_port << std::endl;
         std::cout << std::endl;
 
+        // readonly resource loader 초기화
+        ReadOnlyResLoaderManager::Instance().Initialize(config.platform_type);
+        
         // KMS 초기화
         std::cout << "=== KMS Initialization ===" << std::endl;
 

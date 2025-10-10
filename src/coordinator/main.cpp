@@ -6,6 +6,7 @@
 #include "common/kms/include/KMSException.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/kms/include/KMSManager.hpp"
+#include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include <iostream>
 #include <signal.h>
@@ -23,6 +24,7 @@ using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
 using namespace mpc_engine::network::tls;
 using namespace mpc_engine::protocol::coordinator_node;
+using namespace mpc_engine::resource;
 
 // 전역 상태 관리
 static CoordinatorServer* g_coordinator = nullptr;
@@ -112,14 +114,24 @@ int main(int argc, char* argv[])
     }
     
     try {
-        // ========================================
-        // 1. KMS 초기화
-        // ========================================
         std::string platform_type = Config::GetString("COORDINATOR_PLATFORM");
         PlatformType platform = PlatformTypeFromString(platform_type);
         std::cout << "\n=== KMS Initialization ===" << std::endl;
         std::cout << "Coordinator Platform: " << platform_type << std::endl;
-        
+
+        if (platform == PlatformType::UNKNOWN) {
+            std::cerr << "✗ Unsupported platform type: " << platform_type << std::endl;
+            return 1;
+        }
+
+        // ========================================
+        // 0. 리소스 로더 초기화
+        // ========================================
+        ReadOnlyResLoaderManager::Instance().Initialize(platform);
+
+        // ========================================
+        // 1. KMS 초기화
+        // ========================================
         std::string kms_config_path;
         if (platform == PlatformType::LOCAL) {
             kms_config_path = Config::GetString("COORDINATOR_LOCAL_KMS_PATH");

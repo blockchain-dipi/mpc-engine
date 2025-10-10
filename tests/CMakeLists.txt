@@ -122,6 +122,7 @@ target_link_libraries(test_coordinator_node_tls
     coordinator_node_protocol
     mpc_common
     mpc_kms
+    mpc_resource  # ✅ 추가
     OpenSSL::SSL
     OpenSSL::Crypto
     Threads::Threads
@@ -143,6 +144,7 @@ target_link_libraries(test_coordinator_with_real_nodes
     coordinator_node_protocol
     mpc_common
     mpc_kms
+    mpc_resource  # ✅ 추가
     Threads::Threads
 )
 
@@ -168,6 +170,7 @@ target_link_libraries(test_mpc_engine_full
     coordinator_node_protocol
     mpc_common
     mpc_kms
+    mpc_resource  # ✅ 추가
     Threads::Threads
 )
 

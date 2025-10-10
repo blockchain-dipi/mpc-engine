@@ -195,6 +195,7 @@ add_executable(node
 target_link_libraries(node
     node_server
     mpc_kms
+    mpc_resource
 )
 
 # === Coordinator 실행 파일 ===
@@ -206,6 +207,7 @@ target_link_libraries(coordinator
     coordinator_server
     coordinator_wallet_protocol
     mpc_kms
+    mpc_resource
 )
 
 # === 테스트 ===

@@ -98,6 +98,46 @@ namespace mpc_engine::utils
             return QueueResult::SUCCESS;
         }
 
+        // Emplace: 큐 내부에서 직접 생성
+        template<typename... Args>
+        QueueResult Emplace(Args&&... args) 
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+        
+            cv_not_full.wait(lock, [this]() {
+                return queue.size() < max_size || shutdown_flag;
+            });
+        
+            if (shutdown_flag) {
+                return QueueResult::SHUTDOWN;
+            }
+        
+            queue.emplace(std::forward<Args>(args)...);
+            cv_not_empty.notify_one();
+            return QueueResult::SUCCESS;
+        }
+
+        // TryEmplace: 타임아웃과 함께 Emplace
+        template<typename... Args>
+        QueueResult TryEmplace(std::chrono::milliseconds timeout, Args&&... args) 
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+        
+            if (!cv_not_full.wait_for(lock, timeout, [this]() {
+                return queue.size() < max_size || shutdown_flag;
+            })) {
+                return QueueResult::TIMEOUT;
+            }
+        
+            if (shutdown_flag) {
+                return QueueResult::SHUTDOWN;
+            }
+        
+            queue.emplace(std::forward<Args>(args)...);
+            cv_not_empty.notify_one();
+            return QueueResult::SUCCESS;
+        }
+
         // Pop: Queue에서 아이템 꺼내기 (Queue가 비어있으면 대기)
         QueueResult Pop(TElement& item) 
         {

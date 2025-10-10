@@ -3,6 +3,7 @@
 #include "common/utils/threading/ThreadUtils.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/config/EnvManager.hpp"
+#include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -14,6 +15,7 @@ namespace mpc_engine::coordinator::network
 {
     using namespace mpc_engine::kms;
     using namespace mpc_engine::env;
+    using namespace mpc_engine::resource;
 
     constexpr uint32_t THREAD_JOIN_TIMEOUT_MS = 5000;  // 5초
 
@@ -34,13 +36,33 @@ namespace mpc_engine::coordinator::network
         connection_info.certificate_path = certificate_path;
         connection_info.private_key_id = private_key_id;
         connection_info.status = ConnectionStatus::DISCONNECTED;
-
-        // Send Queue 초기화
-        send_queue = std::make_unique<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>>(100);
     }
 
     NodeTcpClient::~NodeTcpClient() {
         Disconnect();
+    }
+
+    bool NodeTcpClient::Initialize() {
+        if (is_initialized.load()) {
+            std::cout << "[NodeTcpClient] Already initialized: " << connection_info.node_id << std::endl;
+            return true;
+        }
+
+        std::cout << "[NodeTcpClient] Initializing " << connection_info.node_id << "..." << std::endl;
+
+        // 1. TLS Context 초기화
+        if (!InitializeTlsContext()) {
+            std::cerr << "[NodeTcpClient] Failed to initialize TLS context for: " 
+                      << connection_info.node_id << std::endl;
+            return false;
+        }
+
+        // Send Queue 초기화
+        send_queue = std::make_unique<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>>(100);
+
+        is_initialized = true;
+        std::cout << "[NodeTcpClient] Initialized successfully: " << connection_info.node_id << std::endl;
+        return true;
     }
 
     bool NodeTcpClient::InitializeTlsContext() {
@@ -57,8 +79,10 @@ namespace mpc_engine::coordinator::network
             auto& kms = KMSManager::Instance();
         
             // 1. CA 인증서 로드 (서버 인증서 검증용)
-            std::string tls_ca = EnvManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
-            std::string ca_pem = kms.GetSecret(tls_ca);
+            std::string tls_cert_path = EnvManager::Instance().GetString("TLS_CERT_PATH");
+            std::string tls_ca = EnvManager::Instance().GetString("TLS_CERT_CA");
+
+            std::string ca_pem = ReadOnlyResLoaderManager::Instance().ReadFile(tls_cert_path + tls_ca);
             if (ca_pem.empty()) {
                 std::cerr << "[NodeTcpClient] Failed to load CA certificate from KMS" << std::endl;
                 return false;
@@ -70,12 +94,7 @@ namespace mpc_engine::coordinator::network
             }
         
             // 2. Node별 클라이언트 인증서 로드 (mTLS용)
-            std::ifstream cert_file(connection_info.certificate_path);
-            if (!cert_file) {
-                std::cerr << "[NodeTcpClient] Failed to read certificate: " << connection_info.certificate_path << std::endl;
-                return false;
-            }
-            std::string certificate_pem((std::istreambuf_iterator<char>(cert_file)), std::istreambuf_iterator<char>());
+            std::string certificate_pem = ReadOnlyResLoaderManager::Instance().ReadFile(tls_cert_path + connection_info.certificate_path);
             std::string private_key_pem = kms.GetSecret(connection_info.private_key_id);
         
             if (certificate_pem.empty() || private_key_pem.empty()) {
@@ -106,6 +125,11 @@ namespace mpc_engine::coordinator::network
 
         if (is_connected.load()) {
             return true;
+        }
+
+        if (!is_initialized.load()) {
+            std::cerr << "[NodeTcpClient] Not initialized. Call Initialize() first: " << connection_info.node_id << std::endl;
+            return false;
         }
 
         connection_info.connection_attempt_time = utils::GetCurrentTimeMs();

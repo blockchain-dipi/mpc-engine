@@ -5,6 +5,7 @@
 #include "common/utils/firewall/KernelFirewall.hpp"
 #include "common/utils/threading/ThreadUtils.hpp"
 #include "common/kms/include/KMSManager.hpp"
+#include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -15,6 +16,7 @@ namespace mpc_engine::node::network
 {
     using namespace mpc_engine::env;
     using namespace mpc_engine::kms;
+    using namespace mpc_engine::resource;
 
     constexpr uint32_t THREAD_JOIN_TIMEOUT_MS = 5000;  // 5초
 
@@ -43,8 +45,10 @@ namespace mpc_engine::node::network
         auto& kms = KMSManager::Instance();
         try {
             // 1. CA 인증서 로드 (클라이언트 인증서 검증용) ← 추가 필요
-            std::string tls_ca = EnvManager::Instance().GetString("TLS_KMS_CA_KEY_ID");
-            std::string ca_pem = kms.GetSecret(tls_ca);
+            std::string tls_cert_path = EnvManager::Instance().GetString("TLS_CERT_PATH");
+            std::string tls_ca = EnvManager::Instance().GetString("TLS_CERT_CA");
+
+            std::string ca_pem = ReadOnlyResLoaderManager::Instance().ReadFile(tls_cert_path + tls_ca);
             if (ca_pem.empty()) {
                 std::cerr << "[NodeTcpServer] Failed to load CA certificate from KMS" << std::endl;
                 return false;
@@ -55,12 +59,8 @@ namespace mpc_engine::node::network
                 return false;
             }
 
-            // 2. 서버 인증서 로드 (기존 코드)
-            std::ifstream cert_file(certificate_path);
-            if (!cert_file) {
-                return false;
-            }
-            std::string certificate_pem((std::istreambuf_iterator<char>(cert_file)), std::istreambuf_iterator<char>());
+            // 2. 서버 인증서 로드
+            std::string certificate_pem = ReadOnlyResLoaderManager::Instance().ReadFile(tls_cert_path + certificate_path);
             std::string private_key_pem = kms.GetSecret(private_key_id);
 
             if (certificate_pem.empty() || private_key_pem.empty()) {
@@ -252,7 +252,6 @@ namespace mpc_engine::node::network
 
         std::cout << "[1/3] Stopping new connections..." << std::endl;
         StopAcceptingConnections();
-        std::cout << "  ✓ No longer accepting new connections" << std::endl;
 
         std::cout << "[2/3] Waiting for pending requests..." << std::endl;
         auto start = std::chrono::steady_clock::now();
@@ -281,7 +280,6 @@ namespace mpc_engine::node::network
 
         std::cout << "[3/3] Additional cleanup..." << std::endl;
         // TODO: 나중에 여기에 DB 커밋, 로그 플러시 등 추가
-        std::cout << "  ✓ Cleanup complete" << std::endl;
 
         std::cout << "========================================" << std::endl;
         std::cout << (completed ? "  ✓ Ready for shutdown" : "  ⚠ Forced shutdown") << std::endl;
@@ -309,8 +307,7 @@ namespace mpc_engine::node::network
 
     void NodeTcpServer::ConnectionLoop() 
     {
-        std::cout << "Connection thread started" << std::endl;
-        std::cout << "Listening on " << bind_address << ":" << bind_port << std::endl;
+        std::cout << "ConnectionLoop Listening on " << bind_address << ":" << bind_port << std::endl;
         
         if (!security_config.trusted_coordinator_ip.empty()) {
             std::cout << "[SECURITY] Trusted Coordinator: " << security_config.trusted_coordinator_ip << std::endl;
@@ -391,7 +388,17 @@ namespace mpc_engine::node::network
         receive_thread = std::thread(&NodeTcpServer::ReceiveLoop, this);
         send_thread = std::thread(&NodeTcpServer::SendLoop, this);
 
+        // 스레드가 종료될 때까지 대기
+        if (receive_thread.joinable()) {
+            receive_thread.join();
+        }
+
+        if (send_thread.joinable()) {
+            send_thread.join();
+        }
+
         // 연결 종료 처리 (TLS Close 추가)
+        std::cout << "[NodeTcpServer] Worker threads finished" << std::endl;
         NodeConnectionInfo::DisconnectionInfo disconnect_info;
         {
             std::lock_guard<std::mutex> lock(connection_mutex);
@@ -439,13 +446,12 @@ namespace mpc_engine::node::network
                 }
             }
         
-            auto context = std::make_unique<HandlerContext>(
-                request, 
-                message_handler, 
-                send_queue.get()
-            );
-
             try {
+                auto context = std::make_unique<HandlerContext>(
+                    request, 
+                    message_handler, 
+                    send_queue.get()
+                );
                 handler_pool->SubmitOwned(ProcessMessage, std::move(context));
 
             } catch (const std::runtime_error& e) {
@@ -524,120 +530,105 @@ namespace mpc_engine::node::network
         std::cout << "Send thread stopped" << std::endl;
     }
 
+    /**
+    * @brief 메시지 처리 핸들러 (ThreadPool Worker에서 호출)
+    * 
+    * @param context ThreadPool Task가 소유권을 가진 포인터
+    * 
+    * @warning 
+    * - context를 unique_ptr로 감싸지 말 것! (Double Free 발생)
+    * - Task 소멸자에서 자동으로 delete 됨 (owned=true)
+    * - 이 함수에서는 raw pointer로만 사용
+    * 
+    * @note
+    * - 예외 발생 시에도 Task 소멸자가 정리 담당
+    * - 함수 종료 시 명시적 delete 불필요
+    */
     void NodeTcpServer::ProcessMessage(HandlerContext* context)
     {
-        using namespace protocol::coordinator_node;
+        assert(context != nullptr && "HandlerContext must not be null");
+        assert(context->send_queue != nullptr && "send_queue must not be null");
 
-        std::unique_ptr<HandlerContext> ctx(context);
-
-        if (!ctx) {
-            std::cerr << "[ERROR] ProcessMessage received null context" << std::endl;
-            return;
-        }
-
-        NetworkMessage response;
-        uint64_t request_id = ctx->request.header.request_id;  // ✅ 미리 저장
+        uint64_t request_id = context->request.header.request_id;
 
         try {
-            // 검증
-            ValidationResult validation = ctx->request.Validate();
+            // 1. 요청 검증
+            ValidationResult validation = context->request.Validate();
             if (validation != ValidationResult::OK) {
                 std::cerr << "[ERROR] Invalid request in handler: " << ToString(validation) << std::endl;
 
-                response = CreateErrorResponse(
-                    ctx->request.header.message_type,
+                NetworkMessage error_response = CreateErrorResponse(
+                    context->request.header.message_type,
                     std::string("Invalid request: ") + ToString(validation)
                 );
-                response.header.request_id = request_id;
+                error_response.header.request_id = request_id;
 
-                utils::QueueResult result = ctx->send_queue->TryPush(
-                    response, 
+                utils::QueueResult result = context->send_queue->TryPush(
+                    error_response, 
                     std::chrono::milliseconds(100)
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push response: " 
-                              << utils::ToString(result) << std::endl;
+                    std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
                 }
-
                 return;
             }
 
-            if (!ctx->handler) {
+            // 2. 핸들러 존재 확인
+            if (!context->handler) {
                 std::cerr << "[ERROR] Handler is null" << std::endl;
 
-                response = CreateErrorResponse(
-                    ctx->request.header.message_type,
+                NetworkMessage error_response = CreateErrorResponse(
+                    context->request.header.message_type,
                     "Handler not configured"
                 );
-                response.header.request_id = request_id;
+                error_response.header.request_id = request_id;
 
-                utils::QueueResult result = ctx->send_queue->TryPush(
-                    response, 
+                utils::QueueResult result = context->send_queue->TryPush(
+                    error_response, 
                     std::chrono::milliseconds(100)
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push response: " 
-                              << utils::ToString(result) << std::endl;
+                    std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
                 }
-
                 return;
             }
 
-            // 핸들러 호출
-            response = ctx->handler(ctx->request);
+            // 3. 핸들러 호출
+            NetworkMessage response = context->handler(context->request);
 
-            // ✅ Request ID 복사 (가장 중요!)
+            // 4. ✅ Request ID 복사 (중요!)
             response.header.request_id = request_id;
 
-            if (response.Validate() != ValidationResult::OK) {
-                std::cerr << "[ERROR] Handler generated invalid response" << std::endl;
+            // 5. 응답 전송
+            utils::QueueResult result = context->send_queue->TryPush(
+                response, 
+                std::chrono::milliseconds(5000)
+            );
 
-                response = CreateErrorResponse(
-                    ctx->request.header.message_type,
-                    "Handler generated invalid response"
-                );
-                response.header.request_id = request_id;
+            if (result != utils::QueueResult::SUCCESS) {
+                std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
             }
 
-        } catch (const std::bad_alloc& e) {
-            std::cerr << "[ERROR] Memory allocation error in handler: " << e.what() << std::endl;
-            response = CreateErrorResponse(
-                ctx->request.header.message_type,
-                "Server memory error"
-            );
-            response.header.request_id = request_id;
-
         } catch (const std::exception& e) {
-            std::cerr << "[ERROR] Handler exception: " << e.what() << std::endl;
-            response = CreateErrorResponse(
-                ctx->request.header.message_type,
-                std::string("Handler error: ") + e.what()
-            );
-            response.header.request_id = request_id;
+            std::cerr << "[ERROR] Exception in ProcessMessage: " << e.what() << std::endl;
 
-        } catch (...) {
-            std::cerr << "[ERROR] Unknown handler exception" << std::endl;
-            response = CreateErrorResponse(
-                ctx->request.header.message_type,
-                "Unknown server error"
-            );
-            response.header.request_id = request_id;
-        }
+            // 예외 발생 시에도 에러 응답 시도
+            try {
+                NetworkMessage error_response = CreateErrorResponse(
+                    context->request.header.message_type,
+                    "Internal error"
+                );
+                error_response.header.request_id = request_id;
 
-        // 응답 전송
-        utils::QueueResult result = ctx->send_queue->TryPush(
-            response, 
-            std::chrono::milliseconds(1000)
-        );
-
-        if (result == utils::QueueResult::TIMEOUT) {
-            std::cerr << "[ERROR] Failed to push response to send queue: timeout after 1000ms" << std::endl;
-        } else if (result == utils::QueueResult::SHUTDOWN) {
-            std::cerr << "[INFO] Send queue is shutdown, discarding response" << std::endl;
-        } else if (result != utils::QueueResult::SUCCESS) {
-            std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
+                context->send_queue->TryPush(
+                    error_response, 
+                    std::chrono::milliseconds(100)
+                );
+            } catch (...) {
+                std::cerr << "[ERROR] Failed to send error response" << std::endl;
+            }
         }
     }
 

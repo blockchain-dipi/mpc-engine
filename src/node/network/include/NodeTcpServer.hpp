@@ -125,6 +125,11 @@ namespace mpc_engine::node::network
         void ReceiveLoop();
         void SendLoop();
         
+        /**
+        * @brief 메시지 처리 핸들러 (static 함수)
+        * @param context Task-owned pointer (자동 삭제됨)
+        * @warning unique_ptr로 감싸지 말 것!
+        */
         static void ProcessMessage(HandlerContext* context);
         
         void HandleCoordinatorConnection(socket_t client_socket, const std::string& client_ip, uint16_t client_port);

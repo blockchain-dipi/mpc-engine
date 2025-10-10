@@ -5,6 +5,7 @@
 #include "common/types/BasicTypes.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
+#include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include "common/types/BasicTypes.hpp"
 #include <iostream>
@@ -20,6 +21,7 @@ using namespace mpc_engine::node;
 using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
 using namespace mpc_engine::protocol::coordinator_node;
+using namespace mpc_engine::resource;
 
 class TlsTestEnvironment 
 {
@@ -39,6 +41,9 @@ public:
             return false;
         }
 
+        // readonly 리소스 로더 초기화
+        ReadOnlyResLoaderManager::Instance().Initialize(PlatformType::LOCAL);
+
         // 2. KMS 초기화
         std::string kms_path = Config::GetString("NODE_LOCAL_KMS_PATH");
         KMSManager::InitializeLocal(PlatformType::LOCAL, kms_path);
@@ -53,7 +58,7 @@ public:
         std::vector<std::pair<std::string, uint16_t>> node_hosts = Config::GetNodeEndpoints("NODE_HOSTS");
         std::vector<std::string> platforms = Config::GetStringArray("NODE_PLATFORMS");
         std::vector<std::string> tls_cert_paths = Config::GetStringArray("TLS_CERT_PATHS");
-        std::vector<std::string> tls_kms_nodes_key_ids = Config::GetStringArray("TLS_KMS_NODES_KEY_IDS");
+        std::vector<std::string> tls_kms_nodes_coordinator_key_ids = Config::GetStringArray("TLS_KMS_NODES_COORDINATOR_KEY_IDS");
 
         for (size_t i = 0; i < node_ids.size(); ++i) {
             NodeConfig config;
@@ -62,7 +67,7 @@ public:
             config.bind_port = node_hosts[i].second;
             config.platform_type = PlatformTypeFromString(platforms[i]);
             config.certificate_path = tls_cert_paths[i];
-            config.private_key_id = tls_kms_nodes_key_ids[i];
+            config.private_key_id = tls_kms_nodes_coordinator_key_ids[i];
 
             auto node_server = std::make_unique<NodeServer>(config);
             
