@@ -1,12 +1,13 @@
-// src/coordinator/handlers/node/src/ProtocolRouter.cpp
-#include "coordinator/handlers/node/include/ProtocolRouter.hpp"
+// src/coordinator/handlers/node/src/MessageRouter.cpp
+#include "coordinator/handlers/node/include/MessageRouter.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
+#include "coordinator/handlers/node/include/SigningHandler.hpp"
 #include <iostream>
 #include <sstream>
 
 namespace mpc_engine::coordinator::handlers::node
 {
-    bool ProtocolRouter::Initialize() 
+    bool MessageRouter::Initialize() 
     {
         if (initialized) 
         {
@@ -19,11 +20,11 @@ namespace mpc_engine::coordinator::handlers::node
         return true;
     }
 
-    std::unique_ptr<BaseResponse> ProtocolRouter::ProcessMessage(MessageType type, const BaseRequest* request) 
+    std::unique_ptr<BaseResponse> MessageRouter::ProcessMessage(MessageType type, const BaseRequest* request) 
     {
         if (!initialized) 
         {
-            std::cerr << "ProtocolRouter not initialized" << std::endl;
+            std::cerr << "MessageRouter not initialized" << std::endl;
             return nullptr;
         }
 
@@ -46,4 +47,4 @@ namespace mpc_engine::coordinator::handlers::node
         // O(1) 핸들러 호출
         return handlers[index](request);
     }
-} // namespace mpc_engine::protocol
+} // namespace mpc_engine::coordinator::handlers::node

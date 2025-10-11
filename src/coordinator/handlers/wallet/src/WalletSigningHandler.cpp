@@ -1,5 +1,6 @@
-// src/coordinator/handlers/wallet/src/WalletSigningProtocol.cpp
-#include "coordinator/handlers/wallet/include/WalletSigningProtocol.hpp"
+// src/coordinator/handlers/wallet/src/WalletSigningHandler.cpp
+#include "coordinator/handlers/wallet/include/WalletSigningHandler.hpp"
+#include "protocols/coordinator_wallet/include/WalletSigningProtocol.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include <iostream>
 #include <sstream>

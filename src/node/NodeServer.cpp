@@ -1,7 +1,7 @@
 // src/node/NodeServer.cpp
 #include "node/NodeServer.hpp"
 #include "common/config/EnvManager.hpp"
-#include "node/handlers/include/NodeProtocolRouter.hpp"
+#include "node/handlers/include/NodeMessageRouter.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include <iostream>
@@ -37,9 +37,9 @@ namespace mpc_engine::node
             return true;
         }
 
-        // Protocol Router 초기화
-        if (!handlers::NodeProtocolRouter::Instance().Initialize()) {
-            std::cerr << "Failed to initialize node protocol router" << std::endl;
+        // Message Router 초기화
+        if (!handlers::NodeMessageRouter::Instance().Initialize()) {
+            std::cerr << "Failed to initialize node message router" << std::endl;
             return false;
         }
 
@@ -52,8 +52,8 @@ namespace mpc_engine::node
 
         SetupCallbacks();
         is_initialized = true;
-        
-        std::cout << "Node server initialized with protocol router" << std::endl;
+
+        std::cout << "Node server initialized with message router" << std::endl;
         return true;
     }
 
@@ -140,14 +140,14 @@ namespace mpc_engine::node
                 return CreateErrorResponse(message.header.message_type, "Invalid message format");
             }
 
-            // Protocol Router를 통해 처리
-            auto response = handlers::NodeProtocolRouter::Instance().ProcessMessage(
+            // Message Router를 통해 처리
+            auto response = handlers::NodeMessageRouter::Instance().ProcessMessage(
                 static_cast<MessageType>(message.header.message_type), 
                 request.get()
             );
 
             if (!response) {
-                std::cerr << "No response from protocol router" << std::endl;
+                std::cerr << "No response from message router" << std::endl;
                 return CreateErrorResponse(message.header.message_type, "No response generated");
             }
 

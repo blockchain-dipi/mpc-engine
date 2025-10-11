@@ -1,30 +1,30 @@
-// src/node/handlers/src/NodeProtocolRouter.cpp
-#include "node/handlers/include/NodeProtocolRouter.hpp"
-#include "node/handlers/src/NodeSigningProtocol.cpp"
+// src/node/handlers/src/NodeMessageRouter.cpp
+#include "node/handlers/include/NodeMessageRouter.hpp"
+#include "node/handlers/include/NodeSigningHandler.hpp"
 #include <iostream>
 
 namespace mpc_engine::node::handlers
 {
-    bool NodeProtocolRouter::Initialize() 
+    bool NodeMessageRouter::Initialize() 
     {
         if (initialized) {
             return true;
         }
 
-        std::cout << "Initializing Node Protocol Router..." << std::endl;
+        std::cout << "Initializing Node Message Router..." << std::endl;
 
         // 모든 핸들러를 nullptr로 초기화
-        handlers[static_cast<size_t>(MessageType::SIGNING_REQUEST)] = HandleSigningRequest;
+        handlers[static_cast<size_t>(MessageType::SIGNING_REQUEST)] = NoeHandleSigningRequest;
 
         initialized = true;
-        std::cout << "Node Protocol Router initialized successfully" << std::endl;
+        std::cout << "Node Message Router initialized successfully" << std::endl;
         return true;
     }
 
-    std::unique_ptr<BaseResponse> NodeProtocolRouter::ProcessMessage(MessageType type, const BaseRequest* request) 
+    std::unique_ptr<BaseResponse> NodeMessageRouter::ProcessMessage(MessageType type, const BaseRequest* request) 
     {
         if (!initialized) {
-            std::cerr << "NodeProtocolRouter not initialized" << std::endl;
+            std::cerr << "NodeMessageRouter not initialized" << std::endl;
             return nullptr;
         }
 

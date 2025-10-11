@@ -23,6 +23,4 @@ namespace mpc_engine::protocol::coordinator_node
 
         SigningResponse() : BaseResponse(MessageType::SIGNING_REQUEST) {}
     };
-
-    std::unique_ptr<BaseResponse> HandleSigningRequest(const BaseRequest* request);
 }

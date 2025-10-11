@@ -27,7 +27,7 @@ namespace mpc_engine::protocol::coordinator_node
         CORRUPTED_DATA = 7
     };
 
-    inline const char* ToString(ValidationResult result) 
+    inline const char* ValidationResultToString(ValidationResult result) 
     {
         switch (result) {
             case ValidationResult::OK: return "OK";

@@ -374,7 +374,8 @@ namespace mpc_engine::coordinator::network
         // 헤더 유효성 검사
         ValidationResult validation = outMessage.header.ValidateBasic();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Header validation failed: " << mpc_engine::protocol::coordinator_node::ToString(validation) << std::endl;
+            std::cerr << "[SECURITY] Header validation failed: " 
+                << mpc_engine::protocol::coordinator_node::ValidationResultToString(validation) << std::endl;
             return false;
         }
 
@@ -401,7 +402,8 @@ namespace mpc_engine::coordinator::network
         // 메시지 전체 유효성 검사
         validation = outMessage.Validate();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Message validation failed: " << mpc_engine::protocol::coordinator_node::ToString(validation) << std::endl;
+            std::cerr << "[SECURITY] Message validation failed: " 
+                << mpc_engine::protocol::coordinator_node::ValidationResultToString(validation) << std::endl;
             return false;
         }
 
@@ -623,7 +625,7 @@ namespace mpc_engine::coordinator::network
     }
 
     NetworkMessage NodeTcpClient::ConvertToNetworkMessage(const BaseRequest* request) {
-        return NetworkMessage(static_cast<uint16_t>(request->messageType), "");
+        return NetworkMessage(static_cast<uint16_t>(request->messageType), "REQ");
     }
 
     std::unique_ptr<BaseResponse> NodeTcpClient::ConvertFromNetworkMessage(const NetworkMessage& message) {

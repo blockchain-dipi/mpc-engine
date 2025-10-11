@@ -59,78 +59,78 @@ namespace mpc_engine::coordinator::network
         return true;
     }
 
-    std::unique_ptr<WalletSigningResponse> WalletServerManager::SendSigningRequest(const WalletSigningRequest& request) 
-    {
-        if (!is_initialized_.load()) {
-            std::cerr << "[WalletServerManager] Not initialized" << std::endl;
-            return nullptr;
-        }
+    // std::unique_ptr<WalletSigningResponse> WalletServerManager::SendSigningRequest(const WalletSigningRequest& request) 
+    // {
+    //     if (!is_initialized_.load()) {
+    //         std::cerr << "[WalletServerManager] Not initialized" << std::endl;
+    //         return nullptr;
+    //     }
 
-        std::cout << "[WalletServerManager] Sending signing request..." << std::endl;
+    //     std::cout << "[WalletServerManager] Sending signing request..." << std::endl;
 
-        try 
-        {
-            // 1. Connection Pool에서 연결 획득
-            HttpsClient* client = pool_->Acquire(conn_info_.host, conn_info_.port);
-            if (!client) {
-                std::cerr << "[WalletServerManager] Failed to acquire connection" << std::endl;
-                return nullptr;
-            }
+    //     try 
+    //     {
+    //         // 1. Connection Pool에서 연결 획득
+    //         HttpsClient* client = pool_->Acquire(conn_info_.host, conn_info_.port);
+    //         if (!client) {
+    //             std::cerr << "[WalletServerManager] Failed to acquire connection" << std::endl;
+    //             return nullptr;
+    //         }
 
-            // 2. JSON 직렬화
-            std::string json_body = request.ToJson();
-            std::cout << "[WalletServerManager] Request JSON: " << json_body << std::endl;
+    //         // 2. JSON 직렬화
+    //         std::string json_body = request.ToJson();
+    //         std::cout << "[WalletServerManager] Request JSON: " << json_body << std::endl;
 
-            // 3. HTTPS POST 요청
-            std::string path = conn_info_.path_prefix + "/sign";
-            std::string request_id = "req_" + std::to_string(utils::GetCurrentTimeMs());
+    //         // 3. HTTPS POST 요청
+    //         std::string path = conn_info_.path_prefix + "/sign";
+    //         std::string request_id = "req_" + std::to_string(utils::GetCurrentTimeMs());
 
-            char response_buffer[8192];
-            HttpResponseReader::Response http_response;
+    //         char response_buffer[8192];
+    //         HttpResponseReader::Response http_response;
 
-            bool success = client->PostJson(
-                path,
-                conn_info_.auth_token,
-                request_id,
-                json_body,
-                response_buffer,
-                sizeof(response_buffer),
-                http_response
-            );
+    //         bool success = client->PostJson(
+    //             path,
+    //             conn_info_.auth_token,
+    //             request_id,
+    //             json_body,
+    //             response_buffer,
+    //             sizeof(response_buffer),
+    //             http_response
+    //         );
 
-            // 4. 연결 반환
-            pool_->Release(client);
+    //         // 4. 연결 반환
+    //         pool_->Release(client);
 
-            if (!success || !http_response.success) {
-                std::cerr << "[WalletServerManager] HTTP request failed" << std::endl;
-                std::cerr << "  Status: " << http_response.status_code << std::endl;
-                return nullptr;
-            }
+    //         if (!success || !http_response.success) {
+    //             std::cerr << "[WalletServerManager] HTTP request failed" << std::endl;
+    //             std::cerr << "  Status: " << http_response.status_code << std::endl;
+    //             return nullptr;
+    //         }
 
-            // 5. JSON 역직렬화
-            std::string response_json(http_response.body, http_response.body_len);
-            std::cout << "[WalletServerManager] Response JSON: " << response_json << std::endl;
+    //         // 5. JSON 역직렬화
+    //         std::string response_json(http_response.body, http_response.body_len);
+    //         std::cout << "[WalletServerManager] Response JSON: " << response_json << std::endl;
 
-            auto wallet_response = std::make_unique<WalletSigningResponse>();
-            if (!wallet_response->FromJson(response_json)) {
-                std::cerr << "[WalletServerManager] Failed to parse response JSON" << std::endl;
-                return nullptr;
-            }
+    //         auto wallet_response = std::make_unique<WalletSigningResponse>();
+    //         if (!wallet_response->FromJson(response_json)) {
+    //             std::cerr << "[WalletServerManager] Failed to parse response JSON" << std::endl;
+    //             return nullptr;
+    //         }
 
-            std::cout << "[WalletServerManager] Request completed successfully" << std::endl;
-            std::cout << "  Success: " << wallet_response->success << std::endl;
-            if (wallet_response->success) {
-                std::cout << "  Signature: " << wallet_response->finalSignature << std::endl;
-            }
+    //         std::cout << "[WalletServerManager] Request completed successfully" << std::endl;
+    //         std::cout << "  Success: " << wallet_response->success << std::endl;
+    //         if (wallet_response->success) {
+    //             std::cout << "  Signature: " << wallet_response->finalSignature << std::endl;
+    //         }
 
-            return wallet_response;
-        }
-        catch (const std::exception& e) 
-        {
-            std::cerr << "[WalletServerManager] Exception: " << e.what() << std::endl;
-            return nullptr;
-        }
-    }
+    //         return wallet_response;
+    //     }
+    //     catch (const std::exception& e) 
+    //     {
+    //         std::cerr << "[WalletServerManager] Exception: " << e.what() << std::endl;
+    //         return nullptr;
+    //     }
+    // }
 
     WalletConnectionInfo WalletServerManager::GetConnectionInfo() const 
     {

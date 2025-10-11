@@ -1,4 +1,4 @@
-// src/coordinator/handlers/node/include/ProtocolRouter.hpp
+// src/coordinator/handlers/node/include/MessageRouter.hpp
 #pragma once
 
 #include "protocols/coordinator_node/include/MessageTypes.hpp"
@@ -7,29 +7,29 @@
 #include <functional>
 #include <memory>
 
-using namespace mpc_engine::protocol::coordinator_node;
-
 namespace mpc_engine::coordinator::handlers::node
 {
-    // 핸들러 함수 타입 정의
-    using ProtocolHandler = std::function<std::unique_ptr<BaseResponse>(const BaseRequest*)>;
+    using namespace mpc_engine::protocol::coordinator_node;
     
-    class ProtocolRouter 
+    // 핸들러 함수 타입 정의
+    using MessageHandler = std::function<std::unique_ptr<BaseResponse>(const BaseRequest*)>;
+    
+    class MessageRouter 
     {
     private:
-        ProtocolRouter() = default;
+        MessageRouter() = default;
         bool initialized = false;
 
     public:
-        static ProtocolRouter& Instance() 
+        static MessageRouter& Instance() 
         {
-            static ProtocolRouter instance;
+            static MessageRouter instance;
             return instance;
         }
         bool Initialize();
         std::unique_ptr<BaseResponse> ProcessMessage(MessageType type, const BaseRequest* request);
     
     private:
-        std::array<ProtocolHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers;
+        std::array<MessageHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers;
     };
 } // namespace mpc_engine::protocol

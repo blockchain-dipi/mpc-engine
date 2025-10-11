@@ -1,13 +1,14 @@
-// src/coordinator/handlers/node/src/SigningProtocol.cpp
+// src/coordinator/handlers/node/src/SigningHandler.cpp
+#include "coordinator/handlers/node/include/SigningHandler.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include <iostream>
 #include <memory>
 
-using namespace mpc_engine::protocol::coordinator_node;
-
-namespace mpc_engine::node::handlers
+namespace mpc_engine::coordinator::handlers::node
 {
+    using namespace mpc_engine::protocol::coordinator_node;
+
     std::unique_ptr<BaseResponse> HandleSigningRequest(const BaseRequest* request) 
     {
         std::cout << "=== HandleSigningRequest ===" << std::endl;
@@ -38,4 +39,4 @@ namespace mpc_engine::node::handlers
         
         return response;
     }
-}
+} // namespace mpc_engine::coordinator::handlers::node

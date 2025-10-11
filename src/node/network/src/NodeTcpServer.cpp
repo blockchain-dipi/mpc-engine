@@ -545,12 +545,12 @@ namespace mpc_engine::node::network
             // 1. 요청 검증
             ValidationResult validation = context->request.Validate();
             if (validation != ValidationResult::OK) {
-                std::cerr << "[ERROR] Invalid request in handler: " << ToString(validation) << std::endl;
+                std::cerr << "[ERROR] Invalid request in handler: " << ValidationResultToString(validation) << std::endl;
 
                 utils::QueueResult result = context->send_queue->TryPush(
                     CreateErrorResponse(
                         context->request.header.message_type, 
-                        std::string("Invalid request: ") + ToString(validation),
+                        std::string("Invalid request: ") + ValidationResultToString(validation),
                         request_id
                     ),
                     std::chrono::milliseconds(100)
@@ -674,7 +674,7 @@ namespace mpc_engine::node::network
         // 기존 검증 로직 그대로 유지
         ValidationResult validation = outMessage.header.ValidateBasic();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Header validation failed: " << ToString(validation) << std::endl;
+            std::cerr << "[SECURITY] Header validation failed: " << ValidationResultToString(validation) << std::endl;
             std::cerr << "[SECURITY]   Magic: 0x" << std::hex << outMessage.header.magic << std::dec << std::endl;
             std::cerr << "[SECURITY]   Version: " << outMessage.header.version << std::endl;
             std::cerr << "[SECURITY]   Body length: " << outMessage.header.body_length << std::endl;
@@ -702,7 +702,7 @@ namespace mpc_engine::node::network
 
         validation = outMessage.Validate();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Message validation failed: " << ToString(validation) << std::endl;
+            std::cerr << "[SECURITY] Message validation failed: " << ValidationResultToString(validation) << std::endl;
             return false;
         }
 

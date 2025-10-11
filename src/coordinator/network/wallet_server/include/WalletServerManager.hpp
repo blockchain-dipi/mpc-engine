@@ -1,7 +1,7 @@
 // src/coordinator/network/wallet_server/include/WalletServerManager.hpp
 #pragma once
 #include "coordinator/network/wallet_server/include/WalletConnectionInfo.hpp"
-#include "coordinator/network/wallet_server/include/WalletProtocolRouter.hpp"
+#include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include "common/https/include/HttpsConnectionPool.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
@@ -12,13 +12,14 @@
 namespace mpc_engine::coordinator::network
 {
     using namespace mpc_engine::protocol::coordinator_wallet;    
+    using namespace mpc_engine::coordinator::handlers::wallet;
     using namespace mpc_engine::network::tls;
 
     /**
      * @brief Wallet Server Manager (Singleton)
      * 
      * - HttpsConnectionPool 관리
-     * - WalletProtocolRouter 통합
+     * - WalletMessageRouter 통합
      * - Coordinator가 사용하는 고수준 API
      */
     class WalletServerManager 
@@ -44,14 +45,14 @@ namespace mpc_engine::coordinator::network
             const TlsContext& tls_ctx
         );
 
-        /**
-         * @brief 서명 요청 전송
-         * 
-         * @param request WalletSigningRequest
-         * @return WalletSigningResponse (실패 시 nullptr)
-         */
-        std::unique_ptr<WalletSigningResponse> 
-        SendSigningRequest(const WalletSigningRequest& request);
+        // /**
+        //  * @brief 서명 요청 전송
+        //  * 
+        //  * @param request WalletSigningRequest
+        //  * @return WalletSigningResponse (실패 시 nullptr)
+        //  */
+        // std::unique_ptr<WalletSigningResponse> 
+        // SendSigningRequest(const WalletSigningRequest& request);
 
         /**
          * @brief 연결 정보 조회
@@ -72,10 +73,10 @@ namespace mpc_engine::coordinator::network
 
         // Connection Pool
         std::unique_ptr<https::HttpsConnectionPool> pool_;
-        
-        // Protocol Router
-        WalletProtocolRouter& router_ = WalletProtocolRouter::Instance();
-        
+
+        // Message Router
+        WalletMessageRouter& router_ = WalletMessageRouter::Instance();
+
         // 연결 정보
         WalletConnectionInfo conn_info_;
         

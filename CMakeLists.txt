@@ -70,7 +70,7 @@ target_link_libraries(mpc_kms mpc_common)
 
 # === Coordinator-Node 프로토콜 (올바른 경로) ===
 add_library(coordinator_node_protocol STATIC
-    src/coordinator/handlers/node/src/SigningProtocol.cpp
+    src/coordinator/handlers/node/src/SigningHandler.cpp
 )
 
 target_include_directories(coordinator_node_protocol PUBLIC src)
@@ -79,6 +79,7 @@ target_link_libraries(coordinator_node_protocol mpc_common)
 # === Wallet 프로토콜 ===
 add_library(coordinator_wallet_protocol STATIC
     src/protocols/coordinator_wallet/src/WalletProtocolTypes.cpp
+    src/protocols/coordinator_wallet/src/WalletSigningProtocol.cpp
 )
 
 target_include_directories(coordinator_wallet_protocol PUBLIC src)
@@ -89,7 +90,7 @@ target_link_libraries(coordinator_wallet_protocol
 
 # === Coordinator Wallet 핸들러 ===
 add_library(coordinator_wallet_handlers STATIC
-    src/coordinator/handlers/wallet/src/WalletSigningProtocol.cpp
+    src/coordinator/handlers/wallet/src/WalletSigningHandler.cpp
 )
 
 target_include_directories(coordinator_wallet_handlers PUBLIC src)
@@ -101,8 +102,8 @@ target_link_libraries(coordinator_wallet_handlers
 
 # === Node 핸들러 ===
 add_library(node_handlers STATIC
-    src/node/handlers/src/NodeProtocolRouter.cpp
-    src/node/handlers/src/NodeSigningProtocol.cpp
+    src/node/handlers/src/NodeMessageRouter.cpp
+    src/node/handlers/src/NodeSigningHandler.cpp
 )
 
 target_include_directories(node_handlers PUBLIC src)
@@ -140,8 +141,8 @@ target_link_libraries(coordinator_node_network
 
 # === Coordinator Wallet 네트워크 ===
 add_library(coordinator_wallet_network STATIC
-    src/coordinator/network/wallet_server/src/WalletConnectionInfo.cpp
-    src/coordinator/network/wallet_server/src/WalletProtocolRouter.cpp
+src/coordinator/handlers/wallet/src/WalletMessageRouter.cpp
+    src/coordinator/network/wallet_server/src/WalletConnectionInfo.cpp    
     src/coordinator/network/wallet_server/src/WalletServerManager.cpp
 )
 

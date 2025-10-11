@@ -1,9 +1,10 @@
 // tests/unit/wallet/test_wallet_components.cpp
 #include "coordinator/network/wallet_server/include/WalletConnectionInfo.hpp"
-#include "coordinator/network/wallet_server/include/WalletProtocolRouter.hpp"
+#include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include "coordinator/network/wallet_server/include/WalletServerManager.hpp"
-#include "coordinator/handlers/wallet/include/WalletSigningProtocol.hpp"
+#include "coordinator/handlers/wallet/include/WalletSigningHandler.hpp"
 #include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
+#include "protocols/coordinator_wallet/include/WalletSigningProtocol.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include <iostream>
 #include <cassert>
@@ -130,12 +131,12 @@ bool TestJsonSerialization() {
 }
 
 // ========================================
-// Test 3: WalletProtocolRouter
+// Test 3: WalletMessageRouter
 // ========================================
 bool TestProtocolRouter() {
     std::cout << "\n=== Test 3: Protocol Router ===" << std::endl;
     
-    WalletProtocolRouter& router = WalletProtocolRouter::Instance();
+    WalletMessageRouter& router = WalletMessageRouter::Instance();
     
     // 초기화
     assert(router.Initialize());
@@ -170,7 +171,7 @@ bool TestProtocolRouter() {
 }
 
 // ========================================
-// Test 4: WalletSigningProtocol Handler
+// Test 4: WalletSigningHandler
 // ========================================
 bool TestSigningHandler() {
     std::cout << "\n=== Test 4: Signing Handler ===" << std::endl;

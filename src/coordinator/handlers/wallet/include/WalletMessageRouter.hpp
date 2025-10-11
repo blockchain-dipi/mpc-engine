@@ -1,29 +1,29 @@
-// src/coordinator/network/wallet_server/include/WalletProtocolRouter.hpp
+// src/coordinator/handlers/wallet/include/WalletMessageRouter.hpp
 #pragma once
 #include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
 #include <array>
 #include <functional>
 #include <memory>
 
-namespace mpc_engine::coordinator::network
+namespace mpc_engine::coordinator::handlers::wallet
 {
     using namespace protocol::coordinator_wallet;
 
     /**
-     * @brief Wallet Protocol Router
+     * @brief Wallet Message Router
      * 
-     * - Node의 NodeProtocolRouter와 동일한 패턴
+     * - Node의 NodeMessageRouter와 동일한 패턴
      * - WalletMessageType → Handler 함수 매핑
      * - O(1) 라우팅
      */
-    class WalletProtocolRouter 
+    class WalletMessageRouter 
     {
     public:
         using HandlerFunction = std::function<std::unique_ptr<WalletBaseResponse>(const WalletBaseRequest*)>;
 
-        static WalletProtocolRouter& Instance() 
+        static WalletMessageRouter& Instance() 
         {
-            static WalletProtocolRouter instance;
+            static WalletMessageRouter instance;
             return instance;
         }
 
@@ -45,17 +45,16 @@ namespace mpc_engine::coordinator::network
         );
 
     private:
-        WalletProtocolRouter() = default;
-        ~WalletProtocolRouter() = default;
+        WalletMessageRouter() = default;
+        ~WalletMessageRouter() = default;
 
-        WalletProtocolRouter(const WalletProtocolRouter&) = delete;
-        WalletProtocolRouter& operator=(const WalletProtocolRouter&) = delete;
+        WalletMessageRouter(const WalletMessageRouter&) = delete;
+        WalletMessageRouter& operator=(const WalletMessageRouter&) = delete;
 
         // Handler 배열 (O(1) 접근)
-        std::array<HandlerFunction, 
-                   static_cast<size_t>(WalletMessageType::MAX_MESSAGE_TYPE)> handlers_{};
+        std::array<HandlerFunction, static_cast<size_t>(WalletMessageType::MAX_MESSAGE_TYPE)> handlers_{};
         
         bool initialized = false;
     };
 
-} // namespace mpc_engine::coordinator::network
+} // namespace mpc_engine::coordinator::handlers::wallet

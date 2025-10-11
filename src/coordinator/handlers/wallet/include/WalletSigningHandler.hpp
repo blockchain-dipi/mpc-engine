@@ -1,4 +1,4 @@
-// src/coordinator/handlers/wallet/include/WalletSigningProtocol.hpp
+// src/coordinator/handlers/wallet/include/WalletSigningHandler.hpp
 #pragma once
 #include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
 #include <memory>

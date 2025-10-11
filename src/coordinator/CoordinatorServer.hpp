@@ -93,8 +93,8 @@ namespace mpc_engine::coordinator
 
         bool InitializeWalletServer(const std::string& wallet_url, const std::string& auth_token);
 
-        std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
-            SendToWallet(const protocol::coordinator_wallet::WalletSigningRequest& request);
+        // std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
+        //     SendToWallet(const protocol::coordinator_wallet::WalletSigningRequest& request);
 
         bool IsWalletServerInitialized() const;
 

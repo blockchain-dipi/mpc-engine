@@ -1,14 +1,17 @@
-// src/coordinator/handlers/node/src/SigningProtocol.cpp
+// src/node/handlers/src/NodeSigningProtocol.cpp
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
+#include "node/handlers/include/NodeSigningHandler.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include <iostream>
 #include <memory>
 
-namespace mpc_engine::protocol::coordinator_node
+namespace mpc_engine::node::handlers
 {
-    std::unique_ptr<BaseResponse> HandleSigningRequest(const BaseRequest* request) 
+    using namespace mpc_engine::protocol::coordinator_node;
+    
+    std::unique_ptr<BaseResponse> NoeHandleSigningRequest(const BaseRequest* request) 
     {
-        std::cout << "=== HandleSigningRequest ===" << std::endl;
+        std::cout << "=== NoeHandleSigningRequest ===" << std::endl;
 
         const SigningRequest* signingReq = static_cast<const SigningRequest*>(request);
         std::unique_ptr<SigningResponse> response = std::make_unique<SigningResponse>();

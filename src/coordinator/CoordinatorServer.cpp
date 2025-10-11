@@ -110,18 +110,18 @@ namespace mpc_engine::coordinator
         return true;
     }
 
-    std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
-    CoordinatorServer::SendToWallet(
-        const protocol::coordinator_wallet::WalletSigningRequest& request
-    ) {
-        if (!wallet_manager_.IsInitialized()) {
-            std::cerr << "[CoordinatorServer] Wallet Server not initialized" << std::endl;
-            return nullptr;
-        }
+    // std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
+    // CoordinatorServer::SendToWallet(
+    //     const protocol::coordinator_wallet::WalletSigningRequest& request
+    // ) {
+    //     if (!wallet_manager_.IsInitialized()) {
+    //         std::cerr << "[CoordinatorServer] Wallet Server not initialized" << std::endl;
+    //         return nullptr;
+    //     }
 
-        std::cout << "[CoordinatorServer] Sending request to Wallet Server..." << std::endl;
-        return wallet_manager_.SendSigningRequest(request);
-    }
+    //     std::cout << "[CoordinatorServer] Sending request to Wallet Server..." << std::endl;
+    //     return wallet_manager_.SendSigningRequest(request);
+    // }
 
     bool CoordinatorServer::IsWalletServerInitialized() const 
     {

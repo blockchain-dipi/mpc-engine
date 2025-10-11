@@ -1,4 +1,4 @@
-// src/node/handlers/include/NodeProtocolRouter.hpp
+// src/node/handlers/include/NodeMessageRouter.hpp
 #pragma once
 
 #include "protocols/coordinator_node/include/MessageTypes.hpp"
@@ -8,23 +8,21 @@
 #include <memory>
 #include <array>
 
-using namespace mpc_engine::protocol::coordinator_node;
-
 namespace mpc_engine::node::handlers
 {
-    // 핸들러 함수 타입 정의
-    using NodeProtocolHandler = std::function<std::unique_ptr<BaseResponse>(const BaseRequest*)>;
+    using namespace mpc_engine::protocol::coordinator_node;
+    using NodeMessageHandler = std::function<std::unique_ptr<BaseResponse>(const BaseRequest*)>;
     
-    class NodeProtocolRouter 
+    class NodeMessageRouter 
     {
     private:
-        NodeProtocolRouter() = default;
+        NodeMessageRouter() = default;
         bool initialized = false;
 
     public:
-        static NodeProtocolRouter& Instance() 
+        static NodeMessageRouter& Instance() 
         {
-            static NodeProtocolRouter instance;
+            static NodeMessageRouter instance;
             return instance;
         }
         
@@ -33,6 +31,6 @@ namespace mpc_engine::node::handlers
         std::unique_ptr<BaseResponse> ProcessMessage(MessageType type, const BaseRequest* request);
        
     private:
-        std::array<NodeProtocolHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers;
+        std::array<NodeMessageHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers;
     };
 } // namespace mpc_engine::node::handlers
