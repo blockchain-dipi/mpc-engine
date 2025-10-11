@@ -2,12 +2,11 @@
 #include "coordinator/CoordinatorServer.hpp"
 #include "node/NodeServer.hpp"
 #include "common/config/EnvManager.hpp"
-#include "common/types/BasicTypes.hpp"
+#include "types/BasicTypes.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include "protocols/coordinator_node/include/SigningProtocol.hpp"
-#include "common/types/BasicTypes.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>

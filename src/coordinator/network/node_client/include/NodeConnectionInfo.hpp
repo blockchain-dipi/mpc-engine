@@ -1,5 +1,5 @@
 #pragma once
-#include "common/types/BasicTypes.hpp"
+#include "types/BasicTypes.hpp"
 #include "node/NodeServer.hpp"
 #include <atomic>
 

@@ -1,7 +1,7 @@
 // src/coordinator/network/node_client/include/NodeTcpClient.hpp
 #pragma once
 #include "NodeConnectionInfo.hpp"
-#include "protocols/coordinator_node/include/MessageTypes.hpp"
+#include "types/MessageTypes.hpp"
 #include "common/utils/queue/ThreadSafeQueue.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/network/tls/include/TlsConnection.hpp"

@@ -1,6 +1,6 @@
 // src/node/network/include/NodeConnectionInfo.hpp
 #pragma once
-#include "common/types/BasicTypes.hpp"
+#include "types/BasicTypes.hpp"
 #include "common/network/tls/include/TlsConnection.hpp"
 #include <string>
 #include <memory>

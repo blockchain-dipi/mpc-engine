@@ -2,8 +2,8 @@
 #pragma once
 #include "coordinator/network/node_client/include/NodeTcpClient.hpp"
 #include "coordinator/network/wallet_server/include/WalletServerManager.hpp"
-#include "protocols/coordinator_node/include/MessageTypes.hpp"
-#include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
+#include "types/MessageTypes.hpp"
+#include "types/WalletMessageType.hpp"
 #include <memory>
 #include <string>
 #include <unordered_map>

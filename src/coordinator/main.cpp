@@ -1,7 +1,7 @@
 // src/coordinator/main.cpp
 #include "CoordinatorServer.hpp"
+#include "types/BasicTypes.hpp"
 #include "common/config/EnvManager.hpp"
-#include "common/types/BasicTypes.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include "common/network/tls/include/TlsContext.hpp"

@@ -1,9 +1,9 @@
 // src/node/main.cpp
 #include "NodeServer.hpp"
+#include "types/BasicTypes.hpp"
 #include "common/config/EnvManager.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/kms/include/KMSException.hpp"
-#include "common/types/BasicTypes.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include <iostream>
 #include <signal.h>

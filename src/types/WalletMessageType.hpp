@@ -1,4 +1,4 @@
-// src/protocols/coordinator_wallet/include/WalletProtocolTypes.hpp
+// src/types/WalletMessageType.hpp
 #pragma once
 #include <string>
 #include <vector>

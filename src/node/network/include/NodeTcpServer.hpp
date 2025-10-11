@@ -1,11 +1,11 @@
 // src/node/network/include/NodeTcpServer.hpp
 #pragma once
-#include "common/types/BasicTypes.hpp"
+#include "types/BasicTypes.hpp"
 #include "common/utils/threading/ThreadPool.hpp"
 #include "common/utils/queue/ThreadSafeQueue.hpp"
 #include "common/network/tls/include/TlsConnection.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
-#include "protocols/coordinator_node/include/MessageTypes.hpp"
+#include "types/MessageTypes.hpp"
 #include "NodeConnectionInfo.hpp"
 #include <functional>
 #include <thread>

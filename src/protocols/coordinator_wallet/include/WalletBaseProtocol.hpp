@@ -1,6 +1,6 @@
 // src/protocols/coordinator_wallet/include/WalletBaseProtocol.hpp
 #pragma once
-#include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
+#include "types/WalletMessageType.hpp"
 #include <string>
 #include <vector>
 #include <cstdint>

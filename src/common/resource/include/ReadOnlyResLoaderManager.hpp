@@ -2,7 +2,7 @@
 #pragma once
 
 #include "IReadOnlyResLoader.hpp"
-#include "common/types/BasicTypes.hpp"
+#include "types/BasicTypes.hpp"
 #include <memory>
 #include <string>
 

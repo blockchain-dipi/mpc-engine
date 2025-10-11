@@ -4,7 +4,7 @@
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include "common/https/include/HttpsConnectionPool.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
-#include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
+#include "types/WalletMessageType.hpp"
 #include <memory>
 #include <mutex>
 #include <atomic>

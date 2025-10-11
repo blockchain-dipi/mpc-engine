@@ -2,7 +2,7 @@
 #pragma once
 
 #include "TlsContext.hpp"
-#include "common/types/BasicTypes.hpp"
+#include "types/BasicTypes.hpp"
 #include <string>
 #include <memory>
 #include <chrono>

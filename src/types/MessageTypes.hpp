@@ -1,4 +1,4 @@
-// src/protocols/coordinator_node/include/MessageTypes.hpp
+// src/types/MessageTypes.hpp
 #pragma once
 #include <cstdint>
 #include <string>

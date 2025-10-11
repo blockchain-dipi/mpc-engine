@@ -3,7 +3,7 @@
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include "coordinator/network/wallet_server/include/WalletServerManager.hpp"
 #include "coordinator/handlers/wallet/include/WalletSigningHandler.hpp"
-#include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
+#include "types/WalletMessageType.hpp"
 #include "protocols/coordinator_wallet/include/WalletSigningProtocol.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include <iostream>

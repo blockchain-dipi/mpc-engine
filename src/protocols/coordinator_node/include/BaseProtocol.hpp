@@ -1,6 +1,6 @@
 // src/protocols/coordinator_node/include/BaseProtocol.hpp
 #pragma once
-#include "protocols/coordinator_node/include/MessageTypes.hpp"
+#include "types/MessageTypes.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>

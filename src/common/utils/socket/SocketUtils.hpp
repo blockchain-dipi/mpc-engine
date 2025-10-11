@@ -1,6 +1,6 @@
 // src/common/utils/socket/SocketUtils.hpp
 #pragma once
-#include "common/types/BasicTypes.hpp"
+#include "types/BasicTypes.hpp"
 #include <string>
 #include <chrono>
 

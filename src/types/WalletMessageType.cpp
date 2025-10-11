@@ -1,5 +1,5 @@
-// src/protocols/coordinator_wallet/src/WalletProtocolTypes.cpp
-#include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
+// src/types/WalletMessageType.cpp
+#include "WalletMessageType.hpp"
 #include <nlohmann/json.hpp>
 #include <sstream>
 

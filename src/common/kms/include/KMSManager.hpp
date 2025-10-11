@@ -6,7 +6,7 @@
 #include "AzureKMS.hpp"
 #include "IbmKMS.hpp"
 #include "GoogleKMS.hpp"
-#include "common/types/BasicTypes.hpp"
+#include "types/BasicTypes.hpp"
 #include <cassert>
 
 namespace mpc_engine::kms
