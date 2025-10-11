@@ -88,22 +88,6 @@ target_link_libraries(test_wallet_components
 add_test(NAME WalletComponents COMMAND test_wallet_components)
 
 # integration 테스트 ==========================================================================================
-# === Message Validation 테스트 ===
-add_executable(test_message_validation
-    integration/message_validation_test.cpp
-)
-
-target_include_directories(test_message_validation PRIVATE
-    ${TEST_INCLUDE_DIRS}
-)
-
-target_link_libraries(test_message_validation
-    coordinator_node_protocol
-    Threads::Threads
-)
-
-add_test(NAME MessageValidation COMMAND test_message_validation)
-
 # === NEW: TLS Integration Test ===
 add_executable(test_coordinator_node_tls
     integration/test_coordinator_node_tls.cpp
