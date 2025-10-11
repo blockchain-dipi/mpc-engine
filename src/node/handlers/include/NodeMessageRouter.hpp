@@ -1,7 +1,7 @@
 // src/node/handlers/include/NodeMessageRouter.hpp
 #pragma once
 
-#include "protocols/coordinator_node/include/MessageTypes.hpp"
+#include "protocols/coordinator_node/include/BaseProtocol.hpp"
 #include <string>
 #include <cstdint>
 #include <functional>

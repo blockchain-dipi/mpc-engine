@@ -2,7 +2,7 @@
 #pragma once
 #include "common/types/BasicTypes.hpp"
 #include "node/network/include/NodeTcpServer.hpp"
-#include "protocols/coordinator_node/include/MessageTypes.hpp"
+#include "protocols/coordinator_node/include/BaseProtocol.hpp"
 #include <memory>
 #include <string>
 #include <atomic>

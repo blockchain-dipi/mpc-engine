@@ -1,6 +1,6 @@
 // src/coordinator/handlers/wallet/include/WalletMessageRouter.hpp
 #pragma once
-#include "protocols/coordinator_wallet/include/WalletProtocolTypes.hpp"
+#include "protocols/coordinator_wallet/include/WalletBaseProtocol.hpp"
 #include <array>
 #include <functional>
 #include <memory>

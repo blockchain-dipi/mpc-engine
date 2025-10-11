@@ -1,6 +1,6 @@
 // src/node/handlers/include/SigningHandler.hpp
 #pragma once
-#include "protocols/coordinator_node/include/MessageTypes.hpp"
+#include "protocols/coordinator_node/include/BaseProtocol.hpp"
 #include <memory>
 
 namespace mpc_engine::coordinator::handlers::node

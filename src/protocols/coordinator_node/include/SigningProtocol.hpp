@@ -1,6 +1,6 @@
 // src/protocols/coordinator_node/include/SigningProtocol.hpp
 #pragma once
-#include "MessageTypes.hpp"
+#include "BaseProtocol.hpp"
 #include <memory>
 
 namespace mpc_engine::protocol::coordinator_node

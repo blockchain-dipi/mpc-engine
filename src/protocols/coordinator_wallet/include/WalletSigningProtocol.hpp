@@ -1,6 +1,6 @@
 // src/protocols/coordinator_wallet/include/WalletSigningProtocol.hpp
 #pragma once
-#include "WalletProtocolTypes.hpp"
+#include "WalletBaseProtocol.hpp"
 #include <memory>
 
 namespace mpc_engine::protocol::coordinator_wallet
