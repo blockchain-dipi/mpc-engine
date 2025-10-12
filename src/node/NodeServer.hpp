@@ -10,6 +10,7 @@
 namespace mpc_engine::node
 {    
     using namespace protocol::coordinator_node;
+    using namespace mpc_engine::network::framing;
 
     struct NodeConfig 
     {

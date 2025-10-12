@@ -8,7 +8,7 @@
 #include <memory>
 #include <functional>
 
-namespace mpc_engine::https
+namespace mpc_engine::network::https
 {
     /**
      * @brief HTTPS Client 설정
@@ -96,4 +96,4 @@ namespace mpc_engine::https
         );
     };
 
-} // namespace mpc_engine::https
+} // namespace mpc_engine::network::https

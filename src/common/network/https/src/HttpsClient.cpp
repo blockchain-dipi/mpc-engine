@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <cstring>
 
-namespace mpc_engine::https
+namespace mpc_engine::network::https
 {
     using namespace network::tls;
 
@@ -177,4 +177,4 @@ namespace mpc_engine::https
         return read_err == TlsError::NONE;
     }
 
-} // namespace mpc_engine::https
+} // namespace mpc_engine::network::https

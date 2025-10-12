@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <iostream>
 
-namespace mpc_engine::https
+namespace mpc_engine::network::https
 {
     HttpsConnectionPool::HttpsConnectionPool(const ConnectionPoolConfig& config)
         : config_(config)
@@ -212,4 +212,4 @@ namespace mpc_engine::https
         return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
     }
 
-} // namespace mpc_engine::https
+} // namespace mpc_engine::network::https

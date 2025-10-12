@@ -17,15 +17,6 @@ namespace mpc_engine::protocol::coordinator_node
 
         BaseRequest(MessageType type) : messageType(type) {}
         virtual ~BaseRequest() = default;
-
-        // 비즈니스 로직 검증 (서브클래스에서 override)
-        virtual ValidationResult ValidateFields() const 
-        {
-            if (uid.empty()) {
-                return ValidationResult::CORRUPTED_DATA;
-            }
-            return ValidationResult::OK;
-        }
     };
 
     struct BaseResponse 

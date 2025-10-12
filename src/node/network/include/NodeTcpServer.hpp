@@ -5,6 +5,7 @@
 #include "common/utils/queue/ThreadSafeQueue.hpp"
 #include "common/network/tls/include/TlsConnection.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
+#include "common/network/framing/tcp.hpp"
 #include "types/MessageTypes.hpp"
 #include "NodeConnectionInfo.hpp"
 #include <functional>
@@ -18,6 +19,7 @@ namespace mpc_engine::node::network
 {
     using namespace protocol::coordinator_node;
     using namespace mpc_engine::network::tls;
+    using namespace mpc_engine::network::framing;
     
     using MessageHandler = std::function<NetworkMessage(const NetworkMessage&)>;
     using ConnectionHandler = std::function<void(const NodeConnectionInfo&)>;

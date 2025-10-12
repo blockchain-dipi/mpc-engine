@@ -14,7 +14,7 @@ namespace mpc_engine::node::handlers
         std::cout << "Initializing Node Message Router..." << std::endl;
 
         // 모든 핸들러를 nullptr로 초기화
-        handlers[static_cast<size_t>(MessageType::SIGNING_REQUEST)] = NoeHandleSigningRequest;
+        handlers_[static_cast<size_t>(MessageType::SIGNING_REQUEST)] = NoeHandleSigningRequest;
 
         initialized = true;
         std::cout << "Node Message Router initialized successfully" << std::endl;
@@ -42,7 +42,7 @@ namespace mpc_engine::node::handlers
         }
 
         // 핸들러 존재 체크
-        if (!handlers[index]) {
+        if (!handlers_[index]) {
             std::cerr << "No handler for message type: " << index << std::endl;
             return nullptr;
         }
@@ -50,6 +50,6 @@ namespace mpc_engine::node::handlers
         std::cout << "Processing message type: " << static_cast<uint32_t>(type) << std::endl;
 
         // O(1) 핸들러 호출
-        return handlers[index](request);
+        return handlers_[index](request);
     }
 }

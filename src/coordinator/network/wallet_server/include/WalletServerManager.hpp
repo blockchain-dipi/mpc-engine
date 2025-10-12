@@ -14,6 +14,7 @@ namespace mpc_engine::coordinator::network
     using namespace mpc_engine::protocol::coordinator_wallet;    
     using namespace mpc_engine::coordinator::handlers::wallet;
     using namespace mpc_engine::network::tls;
+    using namespace mpc_engine::network::https;
 
     /**
      * @brief Wallet Server Manager (Singleton)
@@ -72,7 +73,7 @@ namespace mpc_engine::coordinator::network
         WalletServerManager& operator=(const WalletServerManager&) = delete;
 
         // Connection Pool
-        std::unique_ptr<https::HttpsConnectionPool> pool_;
+        std::unique_ptr<HttpsConnectionPool> pool_;
 
         // Message Router
         WalletMessageRouter& router_ = WalletMessageRouter::Instance();

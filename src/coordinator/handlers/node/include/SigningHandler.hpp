@@ -1,4 +1,4 @@
-// src/node/handlers/include/SigningHandler.hpp
+// src/coordinator/handlers/node/include/SigningHandler.hpp
 #pragma once
 #include "protocols/coordinator_node/include/BaseProtocol.hpp"
 #include <memory>

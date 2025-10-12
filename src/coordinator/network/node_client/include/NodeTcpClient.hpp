@@ -26,7 +26,7 @@ namespace mpc_engine::coordinator::network
     // 비동기 요청 결과
     struct AsyncRequestResult {
         uint64_t request_id;
-        std::future<protocol::coordinator_node::NetworkMessage> future;
+        std::future<NetworkMessage> future;
     };
 
     class NodeTcpClient 
@@ -49,10 +49,10 @@ namespace mpc_engine::coordinator::network
         std::unique_ptr<TlsConnection> tls_connection;
 
         // Send Queue: 여러 Handler가 요청을 큐잉
-        std::unique_ptr<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>> send_queue;
+        std::unique_ptr<utils::ThreadSafeQueue<NetworkMessage>> send_queue;
         
         // Pending Requests: request_id → promise 매핑
-        std::unordered_map<uint64_t, std::promise<protocol::coordinator_node::NetworkMessage>> pending_requests;
+        std::unordered_map<uint64_t, std::promise<NetworkMessage>> pending_requests;
         std::mutex pending_mutex;
         
         // Request ID 생성기

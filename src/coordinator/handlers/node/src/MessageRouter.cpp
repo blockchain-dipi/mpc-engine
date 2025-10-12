@@ -14,7 +14,7 @@ namespace mpc_engine::coordinator::handlers::node
             return true;        
         }
     
-        handlers[static_cast<size_t>(MessageType::SIGNING_REQUEST)] = HandleSigningRequest;
+        handlers_[static_cast<size_t>(MessageType::SIGNING_REQUEST)] = HandleSigningRequest;
     
         initialized = true;
         return true;
@@ -30,21 +30,18 @@ namespace mpc_engine::coordinator::handlers::node
 
         size_t index = static_cast<size_t>(type);
 
-        // 범위 체크
         if (index >= static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)) 
         {
             std::cerr << "Invalid message type: " << index << std::endl;
             return nullptr;
         }
 
-        // 핸들러 존재 체크
-        if (!handlers[index]) 
+        if (!handlers_[index]) 
         {
             std::cerr << "No handler for message type: " << index << std::endl;
             return nullptr;
         }
 
-        // O(1) 핸들러 호출
-        return handlers[index](request);
+        return handlers_[index](request);
     }
 } // namespace mpc_engine::coordinator::handlers::node

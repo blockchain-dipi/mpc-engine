@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <cstring>
 
-namespace mpc_engine::https
+namespace mpc_engine::network::https
 {
     using namespace network::tls;
 
@@ -281,4 +281,4 @@ namespace mpc_engine::https
         return 0;  // Content-Length 없으면 0
     }
 
-} // namespace mpc_engine::https
+} // namespace mpc_engine::network::https

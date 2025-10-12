@@ -4,7 +4,7 @@
 #include <string_view>
 #include <cstring>
 
-namespace mpc_engine::https
+namespace mpc_engine::network::https
 {
     /**
      * @brief Zero-Copy HTTP Writer
@@ -91,4 +91,4 @@ namespace mpc_engine::https
         static size_t FindContentLength(const char* headers, size_t headers_len);
     };
 
-} // namespace mpc_engine::https
+} // namespace mpc_engine::network::https

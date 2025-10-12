@@ -1,7 +1,7 @@
 // src/coordinator/handlers/node/include/MessageRouter.hpp
 #pragma once
 
-#include "types/MessageTypes.hpp"
+#include "protocols/coordinator_node/include/BaseProtocol.hpp"
 #include <string>
 #include <cstdint>
 #include <functional>
@@ -11,7 +11,6 @@ namespace mpc_engine::coordinator::handlers::node
 {
     using namespace mpc_engine::protocol::coordinator_node;
     
-    // 핸들러 함수 타입 정의
     using MessageHandler = std::function<std::unique_ptr<BaseResponse>(const BaseRequest*)>;
     
     class MessageRouter 
@@ -30,6 +29,6 @@ namespace mpc_engine::coordinator::handlers::node
         std::unique_ptr<BaseResponse> ProcessMessage(MessageType type, const BaseRequest* request);
     
     private:
-        std::array<MessageHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers;
+        std::array<MessageHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers_{};
     };
 } // namespace mpc_engine::protocol

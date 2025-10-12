@@ -3,7 +3,7 @@
 #include <iostream>
 #include <cassert>
 
-using namespace mpc_engine::https;
+using namespace mpc_engine::network::https;
 
 void PrintTestResult(const std::string& test_name, bool passed) {
     std::cout << "[" << (passed ? "PASS" : "FAIL") << "] " << test_name << std::endl;

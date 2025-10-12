@@ -58,7 +58,7 @@ namespace mpc_engine::coordinator::network
         }
 
         // Send Queue 초기화
-        send_queue = std::make_unique<utils::ThreadSafeQueue<protocol::coordinator_node::NetworkMessage>>(100);
+        send_queue = std::make_unique<utils::ThreadSafeQueue<NetworkMessage>>(100);
 
         is_initialized = true;
         std::cout << "[NodeTcpClient] Initialized successfully: " << connection_info.node_id << std::endl;
@@ -318,7 +318,7 @@ namespace mpc_engine::coordinator::network
             }
 
             // 응답 받기
-            protocol::coordinator_node::NetworkMessage response = result.future.get();
+            NetworkMessage response = result.future.get();
 
             // NetworkMessage → BaseResponse 변환
             return ConvertFromNetworkMessage(response);
@@ -374,13 +374,7 @@ namespace mpc_engine::coordinator::network
         // 헤더 유효성 검사
         ValidationResult validation = outMessage.header.ValidateBasic();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Header validation failed: " 
-                << mpc_engine::protocol::coordinator_node::ValidationResultToString(validation) << std::endl;
-            return false;
-        }
-
-        if (!outMessage.header.IsValidMessageType()) {
-            std::cerr << "[SECURITY] Invalid message type: " << outMessage.header.message_type << std::endl;
+            std::cerr << "[SECURITY] Header validation failed: " << ValidationResultToString(validation) << std::endl;
             return false;
         }
 
@@ -402,8 +396,7 @@ namespace mpc_engine::coordinator::network
         // 메시지 전체 유효성 검사
         validation = outMessage.Validate();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Message validation failed: " 
-                << mpc_engine::protocol::coordinator_node::ValidationResultToString(validation) << std::endl;
+            std::cerr << "[SECURITY] Message validation failed: " << ValidationResultToString(validation) << std::endl;
             return false;
         }
 

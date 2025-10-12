@@ -51,7 +51,6 @@ namespace mpc_engine::coordinator::handlers::wallet
         WalletMessageRouter(const WalletMessageRouter&) = delete;
         WalletMessageRouter& operator=(const WalletMessageRouter&) = delete;
 
-        // Handler 배열 (O(1) 접근)
         std::array<HandlerFunction, static_cast<size_t>(WalletMessageType::MAX_MESSAGE_TYPE)> handlers_{};
         
         bool initialized = false;

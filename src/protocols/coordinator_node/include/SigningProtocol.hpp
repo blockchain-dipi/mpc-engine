@@ -1,4 +1,4 @@
-// src/protocols/coordinator_node/include/SigningProtocol.hpp
+// src/coordinator/handlers/node/include/MessageRouter.hpp
 #pragma once
 #include "BaseProtocol.hpp"
 #include <memory>

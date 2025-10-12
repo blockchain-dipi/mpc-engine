@@ -681,11 +681,6 @@ namespace mpc_engine::node::network
             return false;
         }
 
-        if (!outMessage.header.IsValidMessageType()) {
-            std::cerr << "[SECURITY] Invalid message type: " << outMessage.header.message_type << std::endl;
-            return false;
-        }
-
         if (outMessage.header.body_length > 0) {
             try {
                 outMessage.body.resize(outMessage.header.body_length);

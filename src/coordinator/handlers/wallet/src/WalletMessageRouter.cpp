@@ -53,13 +53,11 @@ namespace mpc_engine::coordinator::handlers::wallet
 
         // 핸들러 존재 체크
         if (!handlers_[index]) {
-            std::cerr << "[WalletMessageRouter] No handler for message type: " 
-                      << ToString(type) << std::endl;
+            std::cerr << "[WalletMessageRouter] No handler for message type: " << WalletMessageTypeToString(type) << std::endl;
             return nullptr;
         }
 
-        std::cout << "[WalletMessageRouter] Processing message type: " 
-                  << ToString(type) << std::endl;
+        std::cout << "[WalletMessageRouter] Processing message type: " << WalletMessageTypeToString(type) << std::endl;
 
         return handlers_[index](request);
     }

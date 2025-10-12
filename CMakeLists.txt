@@ -78,7 +78,6 @@ target_link_libraries(coordinator_node_protocol mpc_common)
 
 # === Wallet 프로토콜 ===
 add_library(coordinator_wallet_protocol STATIC
-    src/types/WalletMessageType.cpp
     src/protocols/coordinator_wallet/src/WalletSigningProtocol.cpp
 )
 

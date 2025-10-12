@@ -6,8 +6,6 @@
 
 namespace mpc_engine::coordinator::network
 {
-    using namespace https;
-
     bool WalletServerManager::Initialize(
         const std::string& wallet_url,
         const std::string& auth_token,

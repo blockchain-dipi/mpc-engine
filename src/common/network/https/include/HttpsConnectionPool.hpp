@@ -8,7 +8,7 @@
 #include <vector>
 #include <chrono>
 
-namespace mpc_engine::https
+namespace mpc_engine::network::https
 {
     /**
      * @brief 연결 풀 설정
@@ -109,4 +109,4 @@ namespace mpc_engine::https
         uint64_t GetCurrentTimeMs() const;
     };
 
-} // namespace mpc_engine::https
+} // namespace mpc_engine::network::https

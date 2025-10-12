@@ -31,6 +31,6 @@ namespace mpc_engine::node::handlers
         std::unique_ptr<BaseResponse> ProcessMessage(MessageType type, const BaseRequest* request);
        
     private:
-        std::array<NodeMessageHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers;
+        std::array<NodeMessageHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers_{};
     };
 } // namespace mpc_engine::node::handlers
