@@ -1,6 +1,6 @@
-// src/common/https/include/HttpsConnectionPool.hpp
+// src/common/network/https/include/HttpsClient.hpp
 #pragma once
-#include "common/https/include/HttpsClient.hpp"
+#include "HttpsClient.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include <string>
 #include <memory>

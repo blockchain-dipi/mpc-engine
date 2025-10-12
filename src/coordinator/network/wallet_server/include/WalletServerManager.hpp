@@ -2,7 +2,7 @@
 #pragma once
 #include "coordinator/network/wallet_server/include/WalletConnectionInfo.hpp"
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
-#include "common/https/include/HttpsConnectionPool.hpp"
+#include "common/network/https/include/HttpsConnectionPool.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "types/WalletMessageType.hpp"
 #include <memory>

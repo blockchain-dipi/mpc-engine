@@ -28,9 +28,9 @@ add_library(mpc_common STATIC
     src/common/utils/firewall/KernelFirewall.cpp
     src/common/config/EnvConfig.cpp
     src/common/config/EnvManager.cpp
-    src/common/https/src/HttpWriter.cpp
-    src/common/https/src/HttpsClient.cpp
-    src/common/https/src/HttpsConnectionPool.cpp
+    src/common/network/https/src/HttpWriter.cpp
+    src/common/network/https/src/HttpsClient.cpp
+    src/common/network/https/src/HttpsConnectionPool.cpp
     src/common/network/tls/src/TlsContext.cpp
     src/common/network/tls/src/TlsConnection.cpp
 )

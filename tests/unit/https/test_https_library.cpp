@@ -1,5 +1,5 @@
 // tests/unit/https/test_https_library.cpp
-#include "common/https/include/HttpsConnectionPool.hpp"
+#include "common/network/https/include/HttpsConnectionPool.hpp"
 #include <iostream>
 #include <cassert>
 

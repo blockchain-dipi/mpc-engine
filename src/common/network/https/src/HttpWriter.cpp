@@ -1,5 +1,5 @@
-// src/common/https/src/HttpWriter.cpp
-#include "common/https/include/HttpWriter.hpp"
+// src/common/network/https/src/HttpWriter.cpp
+#include "common/network/https/include/HttpWriter.hpp"
 #include <cstdio>
 #include <cstring>
 
