@@ -1,4 +1,4 @@
-// src/types/MessageTypes.hpp
+// src/common/network/framing/tcp.hpp
 #pragma once
 #include <cstdint>
 #include <string>

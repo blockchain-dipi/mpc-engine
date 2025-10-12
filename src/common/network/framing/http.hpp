@@ -1,4 +1,4 @@
-// src/types/WalletMessageType.hpp
+// src/common/network/framing/http.hpp
 #pragma once
 #include <string>
 #include <vector>
