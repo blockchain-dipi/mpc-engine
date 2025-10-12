@@ -10,12 +10,12 @@ namespace mpc_engine::protocol::coordinator_wallet
 {
     struct WalletBaseRequest 
     {
-        WalletMessageType messageType;
+        mpc_engine::WalletMessageType messageType;
         std::string requestId;
         std::string timestamp;
         std::string coordinatorId;
         
-        WalletBaseRequest(WalletMessageType type) : messageType(type) {}
+        WalletBaseRequest(mpc_engine::WalletMessageType type) : messageType(type) {}
         virtual ~WalletBaseRequest() = default;
         
         virtual std::string ToJson() const = 0;
@@ -23,13 +23,13 @@ namespace mpc_engine::protocol::coordinator_wallet
     
     struct WalletBaseResponse 
     {
-        WalletMessageType messageType;
+        mpc_engine::WalletMessageType messageType;
         bool success = false;
         std::string errorMessage;
         std::string requestId;
         std::string timestamp;
         
-        WalletBaseResponse(WalletMessageType type) : messageType(type) {}
+        WalletBaseResponse(mpc_engine::WalletMessageType type) : messageType(type) {}
         virtual ~WalletBaseResponse() = default;
         
         virtual bool FromJson(const std::string& json) = 0;

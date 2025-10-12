@@ -288,7 +288,7 @@ namespace mpc_engine::coordinator
         }
     }
 
-    std::unique_ptr<BaseResponse> CoordinatorServer::SendToNode(const std::string& node_id, const BaseRequest* request) 
+    std::unique_ptr<CoordinatorNodeMessage> CoordinatorServer::SendToNode(const std::string& node_id, const CoordinatorNodeMessage* request) 
     {
         network::NodeTcpClient* client = FindNodeClientInternal(node_id);
         if (!client) 
@@ -300,14 +300,14 @@ namespace mpc_engine::coordinator
         return client->SendRequest(request);
     }
 
-    bool CoordinatorServer::BroadcastToNodes(const std::vector<std::string>& node_ids, const BaseRequest* request) 
+    bool CoordinatorServer::BroadcastToNodes(const std::vector<std::string>& node_ids, const CoordinatorNodeMessage* request) 
     {
         if (node_ids.empty()) {
             return true;
         }
     
         // 1. 모든 Node에 비동기 요청
-        std::vector<std::pair<std::string, std::future<std::unique_ptr<BaseResponse>>>> futures;
+        std::vector<std::pair<std::string, std::future<std::unique_ptr<CoordinatorNodeMessage>>>> futures;
         
         for (const std::string& node_id : node_ids) 
         {
@@ -334,11 +334,20 @@ namespace mpc_engine::coordinator
                     continue;
                 }
                 
-                std::unique_ptr<BaseResponse> response = pair.second.get();
-                
-                if (!response || !response->success) {
-                    std::cerr << "Broadcast failed for node: " << node_id << std::endl;
+                std::unique_ptr<CoordinatorNodeMessage> response = pair.second.get();                
+                if (!response) {
+                    std::cerr << "Broadcast failed for node: " << node_id << " - null response" << std::endl;
                     all_success = false;
+                    continue;
+                }
+
+                if (response->has_signing_response()) {
+                    const SigningResponse& signing_resp = response->signing_response();
+                    if (!signing_resp.header().success()) {
+                        std::cerr << "Broadcast failed for node: " << node_id 
+                            << " - error: " << signing_resp.header().error_message() << std::endl;
+                        all_success = false;
+                    }
                 }
                 
             } catch (const std::exception& e) {
@@ -351,7 +360,7 @@ namespace mpc_engine::coordinator
         return all_success;
     }
 
-    bool CoordinatorServer::BroadcastToAllConnectedNodes(const BaseRequest* request) 
+    bool CoordinatorServer::BroadcastToAllConnectedNodes(const CoordinatorNodeMessage* request) 
     {
         std::vector<std::string> connected_nodes = GetConnectedNodeIds();
         return BroadcastToNodes(connected_nodes, request);

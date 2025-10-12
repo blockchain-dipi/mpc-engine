@@ -2,6 +2,7 @@
 #pragma once
 #include "coordinator/network/node_client/include/NodeTcpClient.hpp"
 #include "coordinator/network/wallet_server/include/WalletServerManager.hpp"
+#include "proto/coordinator_node/generated/message.pb.h"
 #include "types/MessageTypes.hpp"
 #include "types/WalletMessageType.hpp"
 #include <memory>
@@ -13,7 +14,7 @@
 
 namespace mpc_engine::coordinator
 {
-    using namespace protocol::coordinator_node;
+    using namespace mpc_engine::proto::coordinator_node;
     using namespace mpc_engine::network::tls;
 
     struct CoordinatorStats 
@@ -69,9 +70,9 @@ namespace mpc_engine::coordinator
         bool IsNodeConnected(const std::string& node_id) const;
         void DisconnectAllNodes();
 
-        std::unique_ptr<BaseResponse> SendToNode(const std::string& node_id, const BaseRequest* request);        
-        bool BroadcastToNodes(const std::vector<std::string>& node_ids, const BaseRequest* request);        
-        bool BroadcastToAllConnectedNodes(const BaseRequest* request);
+        std::unique_ptr<CoordinatorNodeMessage> SendToNode(const std::string& node_id, const CoordinatorNodeMessage* request);        
+        bool BroadcastToNodes(const std::vector<std::string>& node_ids, const CoordinatorNodeMessage* request);        
+        bool BroadcastToAllConnectedNodes(const CoordinatorNodeMessage* request);
 
         std::vector<std::string> GetConnectedNodeIds() const;
         std::vector<std::string> GetReadyNodeIds() const;
@@ -92,10 +93,6 @@ namespace mpc_engine::coordinator
         std::vector<std::string> GetNodesByShardIndex(uint32_t shard_index) const;
 
         bool InitializeWalletServer(const std::string& wallet_url, const std::string& auth_token);
-
-        // std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
-        //     SendToWallet(const protocol::coordinator_wallet::WalletSigningRequest& request);
-
         bool IsWalletServerInitialized() const;
 
     private:

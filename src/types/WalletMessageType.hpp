@@ -1,11 +1,8 @@
 // src/types/WalletMessageType.hpp
 #pragma once
-#include <string>
-#include <vector>
 #include <cstdint>
-#include <memory>
 
-namespace mpc_engine::protocol::coordinator_wallet
+namespace mpc_engine
 {
     /**
      * @brief Wallet 서버와의 통신 프로토콜 타입

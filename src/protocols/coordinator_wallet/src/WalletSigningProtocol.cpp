@@ -41,7 +41,7 @@ namespace mpc_engine::protocol::coordinator_wallet
         try {
             json j = json::parse(json_str);
             
-            messageType = static_cast<WalletMessageType>(
+            messageType = static_cast<mpc_engine::WalletMessageType>(
                 j["messageType"].get<uint32_t>()
             );
             success = j["success"].get<bool>();

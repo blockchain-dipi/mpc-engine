@@ -17,7 +17,6 @@
 
 namespace mpc_engine::node::network
 {
-    using namespace protocol::coordinator_node;
     using namespace mpc_engine::network::tls;
     using namespace mpc_engine::network::framing;
     

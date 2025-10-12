@@ -7,8 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_options(-Wall -Wextra -pedantic -pthread)
 
+find_package(Protobuf REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json 3.2.0)
+
 if(NOT nlohmann_json_FOUND)
     include(FetchContent)
     FetchContent_Declare(json
@@ -21,6 +23,22 @@ endif()
 find_package(Threads REQUIRED)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# === Proto 라이브러리 (최우선 빌드) ===
+set(PROTO_GEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/proto/coordinator_node/generated)
+
+# Proto 생성 파일들 자동 수집
+file(GLOB PROTO_SRCS "${PROTO_GEN_DIR}/*.pb.cc")
+file(GLOB PROTO_HDRS "${PROTO_GEN_DIR}/*.pb.h")
+
+add_library(mpc_proto STATIC ${PROTO_SRCS})
+target_include_directories(mpc_proto PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/proto
+    ${Protobuf_INCLUDE_DIRS}
+)
+target_link_libraries(mpc_proto
+    ${Protobuf_LIBRARIES}
+)
 
 # === 공통 라이브러리 ===
 add_library(mpc_common STATIC
@@ -107,8 +125,9 @@ add_library(node_handlers STATIC
 
 target_include_directories(node_handlers PUBLIC src)
 target_link_libraries(node_handlers 
+    mpc_proto
     mpc_common 
-    coordinator_node_protocol
+    # coordinator_node_protocol
 )
 
 # === Node 네트워크 ===
@@ -119,8 +138,9 @@ add_library(node_network STATIC
 
 target_include_directories(node_network PUBLIC src)
 target_link_libraries(node_network 
+    mpc_proto
     mpc_common 
-    coordinator_node_protocol
+    # coordinator_node_protocol
     Threads::Threads
 )
 
@@ -132,8 +152,9 @@ add_library(coordinator_node_network STATIC
 
 target_include_directories(coordinator_node_network PUBLIC src)
 target_link_libraries(coordinator_node_network 
+    mpc_proto
     mpc_common 
-    coordinator_node_protocol
+    # coordinator_node_protocol
     mpc_kms
     Threads::Threads
 )
@@ -165,8 +186,9 @@ target_include_directories(node_server PUBLIC src)
 target_link_libraries(node_server 
     node_network
     node_handlers
+    mpc_proto
     mpc_common
-    coordinator_node_protocol
+    # coordinator_node_protocol
     mpc_kms
     Threads::Threads
 )
@@ -180,8 +202,9 @@ target_include_directories(coordinator_server PUBLIC src)
 target_link_libraries(coordinator_server
     coordinator_node_network
     coordinator_wallet_network
-    coordinator_node_protocol
+    # coordinator_node_protocol
     coordinator_wallet_protocol
+    mpc_proto
     mpc_common
     mpc_kms
     Threads::Threads

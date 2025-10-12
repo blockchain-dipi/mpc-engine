@@ -1,7 +1,8 @@
 // src/coordinator/handlers/node/include/MessageRouter.hpp
 #pragma once
-
-#include "protocols/coordinator_node/include/BaseProtocol.hpp"
+#include "types/MessageTypes.hpp"
+#include "proto/coordinator_node/generated/common.pb.h"
+#include "proto/coordinator_node/generated/message.pb.h"
 #include <string>
 #include <cstdint>
 #include <functional>
@@ -9,9 +10,10 @@
 
 namespace mpc_engine::coordinator::handlers::node
 {
-    using namespace mpc_engine::protocol::coordinator_node;
+    using namespace mpc_engine::proto::coordinator_node;
     
-    using MessageHandler = std::function<std::unique_ptr<BaseResponse>(const BaseRequest*)>;
+    using MessageHandler = std::function<std::unique_ptr<CoordinatorNodeMessage>(const CoordinatorNodeMessage*)>;
+    
     
     class MessageRouter 
     {
@@ -26,9 +28,9 @@ namespace mpc_engine::coordinator::handlers::node
             return instance;
         }
         bool Initialize();
-        std::unique_ptr<BaseResponse> ProcessMessage(MessageType type, const BaseRequest* request);
+        std::unique_ptr<CoordinatorNodeMessage> ProcessMessage(const CoordinatorNodeMessage* request);
     
     private:
-        std::array<MessageHandler, static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)> handlers_{};
+        std::array<MessageHandler, static_cast<size_t>(mpc_engine::MessageType::MAX_MESSAGE_TYPE)> handlers_{};
     };
-} // namespace mpc_engine::protocol
+} // namespace mpc_engine::coordinator::handlers::node

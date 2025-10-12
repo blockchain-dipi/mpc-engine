@@ -2,14 +2,14 @@
 #pragma once
 #include "types/BasicTypes.hpp"
 #include "node/network/include/NodeTcpServer.hpp"
-#include "protocols/coordinator_node/include/BaseProtocol.hpp"
+#include "proto/coordinator_node/generated/message.pb.h"
 #include <memory>
 #include <string>
 #include <atomic>
 
 namespace mpc_engine::node
 {    
-    using namespace protocol::coordinator_node;
+    using namespace mpc_engine::proto::coordinator_node;
     using namespace mpc_engine::network::framing;
 
     struct NodeConfig 
@@ -66,9 +66,8 @@ namespace mpc_engine::node
         NetworkMessage ProcessMessage(const NetworkMessage& message);
         void SetupCallbacks();
         
-        // 누락된 메서드 선언들 추가
-        std::unique_ptr<BaseRequest> ConvertToBaseRequest(const NetworkMessage& message);
-        NetworkMessage ConvertToNetworkMessage(const BaseResponse& response);
+        std::unique_ptr<CoordinatorNodeMessage> NetworkMessageToProto(const NetworkMessage& message);
+        NetworkMessage ProtoToNetworkMessage(const CoordinatorNodeMessage* proto_msg);
         NetworkMessage CreateErrorResponse(uint16_t messageType, const std::string& errorMessage);
     };
 }

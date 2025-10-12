@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package mpc_engine.proto.coordinator_node;
+
+import "common.proto";
+
+message SigningRequest {
+    RequestHeader header = 1;
+    string key_id = 2;
+    string transaction_data = 3;
+    uint32 threshold = 4;
+    uint32 total_shards = 5;
+}
+
+message SigningResponse {
+    ResponseHeader header = 1;
+    string key_id = 2;
+    string signature = 3;
+    uint32 shard_index = 4;
+}

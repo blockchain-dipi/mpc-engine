@@ -1,9 +1,7 @@
 // src/coordinator/handlers/node/src/MessageRouter.cpp
 #include "coordinator/handlers/node/include/MessageRouter.hpp"
-#include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include "coordinator/handlers/node/include/SigningHandler.hpp"
 #include <iostream>
-#include <sstream>
 
 namespace mpc_engine::coordinator::handlers::node
 {
@@ -14,13 +12,13 @@ namespace mpc_engine::coordinator::handlers::node
             return true;        
         }
     
-        handlers_[static_cast<size_t>(MessageType::SIGNING_REQUEST)] = HandleSigningRequest;
+        handlers_[static_cast<size_t>(mpc_engine::MessageType::SIGNING_REQUEST)] = HandleSigningRequest;
     
         initialized = true;
         return true;
     }
 
-    std::unique_ptr<BaseResponse> MessageRouter::ProcessMessage(MessageType type, const BaseRequest* request) 
+    std::unique_ptr<CoordinatorNodeMessage> MessageRouter::ProcessMessage(const CoordinatorNodeMessage* request) 
     {
         if (!initialized) 
         {
@@ -28,9 +26,8 @@ namespace mpc_engine::coordinator::handlers::node
             return nullptr;
         }
 
-        size_t index = static_cast<size_t>(type);
-
-        if (index >= static_cast<size_t>(MessageType::MAX_MESSAGE_TYPE)) 
+        int32_t index = request->message_type();
+        if (index >= static_cast<int32_t>(mpc_engine::MessageType::MAX_MESSAGE_TYPE)) 
         {
             std::cerr << "Invalid message type: " << index << std::endl;
             return nullptr;

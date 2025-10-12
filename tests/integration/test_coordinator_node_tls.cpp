@@ -6,7 +6,9 @@
 #include "common/kms/include/KMSManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
-#include "protocols/coordinator_node/include/SigningProtocol.hpp"
+#include "proto/coordinator_node/generated/message.pb.h"
+#include "proto/coordinator_node/generated/signing.pb.h"
+#include "proto/coordinator_node/generated/common.pb.h"
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -19,7 +21,7 @@ using namespace mpc_engine::coordinator;
 using namespace mpc_engine::node;
 using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
-using namespace mpc_engine::protocol::coordinator_node;
+using namespace mpc_engine::proto::coordinator_node;
 using namespace mpc_engine::resource;
 
 class TlsTestEnvironment 
@@ -79,7 +81,7 @@ public:
             if (auto* tcp_server = node_server->GetTcpServer()) {
                 std::string trusted_ip = Config::GetString("TRUSTED_COORDINATOR_IP");
                 tcp_server->SetTrustedCoordinator(trusted_ip);
-                tcp_server->EnableKernelFirewall(false); // 테스트에서는 비활성화
+                tcp_server->EnableKernelFirewall(false);
             }
 
             if (!node_server->Start()) {
@@ -163,6 +165,39 @@ public:
     bool IsSetup() const { return is_setup; }
 };
 
+// ===== Helper Functions =====
+
+uint64_t GetCurrentTimeMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+}
+
+std::unique_ptr<CoordinatorNodeMessage> CreateSigningRequest(
+    const std::string& uid,
+    const std::string& key_id,
+    const std::string& transaction_data
+) {
+    auto message = std::make_unique<CoordinatorNodeMessage>();
+    message->set_message_type(static_cast<int32_t>(mpc_engine::MessageType::SIGNING_REQUEST));
+    
+    SigningRequest* request = message->mutable_signing_request();
+    
+    // Header 설정
+    RequestHeader* header = request->mutable_header();
+    header->set_uid(uid);
+    header->set_send_time(std::to_string(GetCurrentTimeMs()));
+    header->set_request_id(GetCurrentTimeMs());
+    
+    // Request 필드 설정
+    request->set_key_id(key_id);
+    request->set_transaction_data(transaction_data);
+    request->set_threshold(2);
+    request->set_total_shards(3);
+    
+    return message;
+}
+
 // ===== Test Functions =====
 
 bool TestBasicConnection(TlsTestEnvironment& env)
@@ -175,7 +210,6 @@ bool TestBasicConnection(TlsTestEnvironment& env)
         return false;
     }
 
-    // 연결된 Node 수 확인
     size_t connected_count = coordinator->GetConnectedNodeCount();
     size_t expected_count = env.GetNodeCount();
 
@@ -186,7 +220,6 @@ bool TestBasicConnection(TlsTestEnvironment& env)
         return false;
     }
 
-    // 각 Node 상태 확인
     std::vector<std::string> node_ids = coordinator->GetConnectedNodeIds();
     for (const auto& node_id : node_ids) {
         mpc_engine::ConnectionStatus status = coordinator->GetNodeStatus(node_id);
@@ -210,20 +243,18 @@ bool TestSigningProtocol(TlsTestEnvironment& env)
         return false;
     }
 
-    // 서명 요청 생성
-    auto signing_request = std::make_unique<SigningRequest>();
-    signing_request->uid = "test_signing_001";
-    signing_request->sendTime = std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count());
-    signing_request->keyId = "test_key_tls";
-    signing_request->transactionData = "0x" + std::string(64, 'a'); // 64자 테스트 데이터
-    signing_request->threshold = 2;
-    signing_request->totalShards = 3;
+    // Proto 메시지 생성
+    auto signing_request = CreateSigningRequest(
+        "test_signing_001",
+        "test_key_tls",
+        "0x" + std::string(64, 'a')
+    );
 
-    std::cout << "Sending signing request: " << signing_request->uid << std::endl;
-    std::cout << "Transaction data: " << signing_request->transactionData.substr(0, 20) << "..." << std::endl;
+    std::cout << "Sending signing request: " 
+              << signing_request->signing_request().header().uid() << std::endl;
+    std::cout << "Transaction data: " 
+              << signing_request->signing_request().transaction_data().substr(0, 20) << "..." << std::endl;
 
-    // 모든 연결된 Node에 요청 전송
     bool success = coordinator->BroadcastToAllConnectedNodes(signing_request.get());
 
     if (!success) {
@@ -250,17 +281,13 @@ bool TestConcurrentRequests(TlsTestEnvironment& env)
 
     std::cout << "Sending " << num_requests << " concurrent requests..." << std::endl;
 
-    // 동시 요청 생성
     for (int i = 0; i < num_requests; ++i) {
         auto future = std::async(std::launch::async, [coordinator, i]() -> bool {
-            auto request = std::make_unique<SigningRequest>();
-            request->uid = "concurrent_test_" + std::to_string(i);
-            request->sendTime = std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count());
-            request->keyId = "concurrent_key_" + std::to_string(i);
-            request->transactionData = "0x" + std::string(64, 'b' + (i % 26));
-            request->threshold = 2;
-            request->totalShards = 3;
+            auto request = CreateSigningRequest(
+                "concurrent_test_" + std::to_string(i),
+                "concurrent_key_" + std::to_string(i),
+                "0x" + std::string(64, 'b' + (i % 26))
+            );
 
             return coordinator->BroadcastToAllConnectedNodes(request.get());
         });
@@ -268,7 +295,6 @@ bool TestConcurrentRequests(TlsTestEnvironment& env)
         futures.push_back(std::move(future));
     }
 
-    // 모든 요청 완료 대기
     int successful_requests = 0;
     for (auto& future : futures) {
         try {
@@ -307,20 +333,16 @@ bool TestStressTest(TlsTestEnvironment& env)
     auto start_time = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < stress_requests; ++i) {
-        auto request = std::make_unique<SigningRequest>();
-        request->uid = "stress_test_" + std::to_string(i);
-        request->sendTime = std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count());
-        request->keyId = "stress_key_" + std::to_string(i);
-        request->transactionData = "0x" + std::string(64, 'c' + (i % 26));
-        request->threshold = 2;
-        request->totalShards = 3;
+        auto request = CreateSigningRequest(
+            "stress_test_" + std::to_string(i),
+            "stress_key_" + std::to_string(i),
+            "0x" + std::string(64, 'c' + (i % 26))
+        );
 
         if (coordinator->BroadcastToAllConnectedNodes(request.get())) {
             successful++;
         }
 
-        // 짧은 대기로 부하 조절
         if (i % 10 == 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
@@ -334,7 +356,7 @@ bool TestStressTest(TlsTestEnvironment& env)
     std::cout << "  Duration: " << duration.count() << "ms" << std::endl;
     std::cout << "  Rate: " << (successful * 1000.0) / duration.count() << " req/sec" << std::endl;
 
-    if (successful >= stress_requests * 0.95) { // 95% 성공률
+    if (successful >= stress_requests * 0.95) {
         std::cout << "✓ Stress test passed" << std::endl;
         return true;
     } else {
@@ -351,29 +373,25 @@ void PrintTestResult(const std::string& test_name, bool result)
 int main()
 {
     std::cout << "================================================" << std::endl;
-    std::cout << "  MPC Engine TLS Integration Test" << std::endl;
+    std::cout << "  MPC Engine TLS Integration Test (Protobuf)" << std::endl;
     std::cout << "================================================" << std::endl;
 
     TlsTestEnvironment env;
 
     try {
-        // 환경 설정
         if (!env.SetupEnvironment()) {
             std::cerr << "Failed to setup test environment" << std::endl;
             return 1;
         }
 
-        // 연결 안정화 대기
         std::cout << "\nWaiting for connections to stabilize..." << std::endl;
         std::this_thread::sleep_for(std::chrono::seconds(3));
 
-        // 테스트 실행
         bool test1 = TestBasicConnection(env);
         bool test2 = TestSigningProtocol(env);
         bool test3 = TestConcurrentRequests(env);
         bool test4 = TestStressTest(env);
 
-        // 결과 출력
         std::cout << "\n=== Test Results ===" << std::endl;
         PrintTestResult("Basic TLS Connection", test1);
         PrintTestResult("Signing Protocol over TLS", test2);
@@ -385,14 +403,13 @@ int main()
         std::cout << "\n================================================" << std::endl;
         if (all_passed) {
             std::cout << "  🎉 ALL TESTS PASSED!" << std::endl;
-            std::cout << "  TLS-based MPC system is working correctly" << std::endl;
+            std::cout << "  TLS-based MPC system with Protobuf is working" << std::endl;
         } else {
             std::cout << "  ❌ SOME TESTS FAILED" << std::endl;
             std::cout << "  Please check the implementation" << std::endl;
         }
         std::cout << "================================================" << std::endl;
 
-        // 정리
         env.TeardownEnvironment();
 
         return all_passed ? 0 : 1;

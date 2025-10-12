@@ -74,7 +74,7 @@ bool TestJsonSerialization() {
     
     // Test 2-1: WalletSigningRequest → JSON
     WalletSigningRequest request;
-    request.messageType = WalletMessageType::SIGNING_REQUEST;
+    request.messageType = mpc_engine::WalletMessageType::SIGNING_REQUEST;
     request.requestId = "req_123";
     request.timestamp = "1234567890";
     request.coordinatorId = "coord_1";
@@ -150,7 +150,7 @@ bool TestProtocolRouter() {
     request.totalShards = 3;
     
     auto response = router.ProcessMessage(
-        WalletMessageType::SIGNING_REQUEST,
+        mpc_engine::WalletMessageType::SIGNING_REQUEST,
         &request
     );
     
@@ -160,7 +160,7 @@ bool TestProtocolRouter() {
     
     // 잘못된 타입
     auto invalid_response = router.ProcessMessage(
-        static_cast<WalletMessageType>(9999),
+        static_cast<mpc_engine::WalletMessageType>(9999),
         &request
     );
     

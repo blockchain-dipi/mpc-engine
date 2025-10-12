@@ -2,6 +2,7 @@
 #pragma once
 #include "NodeConnectionInfo.hpp"
 #include "types/MessageTypes.hpp"
+#include "proto/coordinator_node/generated/message.pb.h"
 #include "common/utils/queue/ThreadSafeQueue.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/network/tls/include/TlsConnection.hpp"
@@ -15,7 +16,7 @@
 
 namespace mpc_engine::coordinator::network
 {
-    using namespace protocol::coordinator_node;
+    using namespace mpc_engine::proto::coordinator_node;
     using namespace mpc_engine::node;
     using namespace mpc_engine::network::tls;
     
@@ -84,8 +85,8 @@ namespace mpc_engine::coordinator::network
         bool SendMessage(const NetworkMessage& message);
         bool ReceiveMessage(NetworkMessage& message);
 
-        AsyncRequestResult SendRequestAsync(const protocol::coordinator_node::BaseRequest* request);
-        std::unique_ptr<BaseResponse> SendRequest(const BaseRequest* request);
+        AsyncRequestResult SendRequestAsync(const CoordinatorNodeMessage* request);
+        std::unique_ptr<CoordinatorNodeMessage> SendRequest(const CoordinatorNodeMessage* request);
 
         void SetConnectedCallback(NodeConnectedCallback callback);
         void SetDisconnectedCallback(NodeDisconnectedCallback callback);
@@ -119,7 +120,7 @@ namespace mpc_engine::coordinator::network
         void NotifyError(NetworkError error, const std::string& message);
         void UpdateConnectionStats(bool success);
 
-        NetworkMessage ConvertToNetworkMessage(const BaseRequest* request);
-        std::unique_ptr<BaseResponse> ConvertFromNetworkMessage(const NetworkMessage& message);
+        NetworkMessage ConvertToNetworkMessage(const CoordinatorNodeMessage* request);
+        std::unique_ptr<CoordinatorNodeMessage> ConvertFromNetworkMessage(const NetworkMessage& message);
     };
 }

@@ -7,7 +7,6 @@
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
-#include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include <iostream>
 #include <signal.h>
 #include <atomic>
@@ -23,7 +22,6 @@ using namespace mpc_engine::node;
 using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
 using namespace mpc_engine::network::tls;
-using namespace mpc_engine::protocol::coordinator_node;
 using namespace mpc_engine::resource;
 
 // 전역 상태 관리

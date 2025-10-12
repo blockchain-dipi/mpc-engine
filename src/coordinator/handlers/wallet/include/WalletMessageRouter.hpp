@@ -40,7 +40,7 @@ namespace mpc_engine::coordinator::handlers::wallet
          * @return 응답 객체 (실패 시 nullptr)
          */
         std::unique_ptr<WalletBaseResponse> ProcessMessage(
-            WalletMessageType type,
+            mpc_engine::WalletMessageType type,
             const WalletBaseRequest* request
         );
 
@@ -51,7 +51,7 @@ namespace mpc_engine::coordinator::handlers::wallet
         WalletMessageRouter(const WalletMessageRouter&) = delete;
         WalletMessageRouter& operator=(const WalletMessageRouter&) = delete;
 
-        std::array<HandlerFunction, static_cast<size_t>(WalletMessageType::MAX_MESSAGE_TYPE)> handlers_{};
+        std::array<HandlerFunction, static_cast<size_t>(mpc_engine::WalletMessageType::MAX_MESSAGE_TYPE)> handlers_{};
         
         bool initialized = false;
     };

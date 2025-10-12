@@ -16,7 +16,7 @@ namespace mpc_engine::coordinator::handlers::wallet
         std::cout << "[WalletMessageRouter] Initializing..." << std::endl;
 
         // Handler 등록
-        handlers_[static_cast<size_t>(WalletMessageType::SIGNING_REQUEST)] = HandleWalletSigningRequest;
+        handlers_[static_cast<size_t>(mpc_engine::WalletMessageType::SIGNING_REQUEST)] = HandleWalletSigningRequest;
 
         // STATUS_CHECK는 나중에 추가 가능
         // handlers_[static_cast<size_t>(WalletMessageType::STATUS_CHECK)] = ...
@@ -28,7 +28,7 @@ namespace mpc_engine::coordinator::handlers::wallet
     }
 
     std::unique_ptr<WalletBaseResponse> WalletMessageRouter::ProcessMessage(
-        WalletMessageType type,
+        mpc_engine::WalletMessageType type,
         const WalletBaseRequest* request
     ) 
     {
@@ -45,7 +45,7 @@ namespace mpc_engine::coordinator::handlers::wallet
         size_t index = static_cast<size_t>(type);
 
         // 범위 체크
-        if (index >= static_cast<size_t>(WalletMessageType::MAX_MESSAGE_TYPE)) {
+        if (index >= static_cast<size_t>(mpc_engine::WalletMessageType::MAX_MESSAGE_TYPE)) {
             std::cerr << "[WalletMessageRouter] Invalid message type: " 
                       << static_cast<uint32_t>(type) << std::endl;
             return nullptr;

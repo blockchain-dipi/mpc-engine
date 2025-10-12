@@ -2,7 +2,6 @@
 #include "node/NodeServer.hpp"
 #include "common/config/EnvManager.hpp"
 #include "node/handlers/include/NodeMessageRouter.hpp"
-#include "protocols/coordinator_node/include/SigningProtocol.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include <iostream>
 
@@ -133,26 +132,24 @@ namespace mpc_engine::node
                   << message.header.message_type << std::endl;
 
         try {
-            // 메시지를 BaseRequest로 변환 (간단한 구현)
-            auto request = ConvertToBaseRequest(message);
-            if (!request) {
-                std::cerr << "Failed to convert network message to base request" << std::endl;
-                return CreateErrorResponse(message.header.message_type, "Invalid message format");
+            // 1. NetworkMessage → Proto 변환
+            std::unique_ptr<CoordinatorNodeMessage> proto_request = NetworkMessageToProto(message);
+            if (!proto_request) {
+                std::cerr << "Failed to parse protobuf message" << std::endl;
+                return CreateErrorResponse(message.header.message_type, "Invalid protobuf format");
             }
 
-            // Message Router를 통해 처리
-            auto response = handlers::NodeMessageRouter::Instance().ProcessMessage(
-                static_cast<MessageType>(message.header.message_type), 
-                request.get()
-            );
+            // 2. NodeMessageRouter로 처리 (Proto 메시지 사용)
+            std::unique_ptr<CoordinatorNodeMessage> proto_response = 
+                handlers::NodeMessageRouter::Instance().ProcessMessage(proto_request.get());
 
-            if (!response) {
+            if (!proto_response) {
                 std::cerr << "No response from message router" << std::endl;
                 return CreateErrorResponse(message.header.message_type, "No response generated");
             }
 
-            // 응답을 NetworkMessage로 변환
-            return ConvertToNetworkMessage(*response);
+            // 3. Proto → NetworkMessage 변환
+            return ProtoToNetworkMessage(proto_response.get());
 
         } catch (const std::exception& e) {
             std::cerr << "Exception in ProcessMessage: " << e.what() << std::endl;
@@ -180,69 +177,43 @@ namespace mpc_engine::node
         std::cout << "Node server callbacks configured" << std::endl;
     }
 
-    std::unique_ptr<BaseRequest> NodeServer::ConvertToBaseRequest(const NetworkMessage& message) {
-        using namespace protocol::coordinator_node;
+    // NetworkMessage → Proto 변환
+    std::unique_ptr<CoordinatorNodeMessage> NodeServer::NetworkMessageToProto(const NetworkMessage& message) {
+        auto proto_msg = std::make_unique<CoordinatorNodeMessage>();
         
-        MessageType msgType = static_cast<MessageType>(message.header.message_type);
-        
-        switch (msgType) {
-            case MessageType::SIGNING_REQUEST: {
-                auto request = std::make_unique<SigningRequest>();
-                
-                // 간단한 페이로드 파싱 (실제로는 더 정교한 직렬화/역직렬화 필요)
-                std::string payload = message.GetBodyAsString();
-                
-                // 기본값 설정 또는 페이로드에서 파싱
-                if (!payload.empty()) {
-                    // 임시로 간단한 파싱 ("|"로 구분된 형태)
-                    size_t pos1 = payload.find('|');
-                    if (pos1 != std::string::npos) {
-                        request->uid = payload.substr(0, pos1);
-                        size_t pos2 = payload.find('|', pos1 + 1);
-                        if (pos2 != std::string::npos) {
-                            request->sendTime = payload.substr(pos1 + 1, pos2 - pos1 - 1);
-                        }
-                    }
-                }
-                
-                // 기본 서명 요청 데이터 설정
-                request->keyId = "default_key_" + node_config.node_id;
-                request->transactionData = "0x" + std::string(64, '0');  // 빈 트랜잭션 데이터
-                request->threshold = 2;
-                request->totalShards = 3;
-                
-                return request;
+        // body에서 Proto 메시지 역직렬화
+        if (!message.body.empty()) {
+            if (!proto_msg->ParseFromArray(message.body.data(), message.body.size())) {
+                std::cerr << "[NodeServer] Failed to parse protobuf from NetworkMessage" << std::endl;
+                return nullptr;
             }
-            
-            default:
-                // 다른 메시지 타입들은 향후 구현
-                return std::make_unique<BaseRequest>(msgType);
         }
+        
+        return proto_msg;
     }
 
-    NetworkMessage NodeServer::ConvertToNetworkMessage(const BaseResponse& response) {
-        // 응답을 간단한 페이로드로 변환
-        std::string payload = "success=" + std::string(response.success ? "true" : "false");
-        
-        if (!response.errorMessage.empty()) {
-            payload += "|error=" + response.errorMessage;
+    // Proto → NetworkMessage 변환
+    NetworkMessage NodeServer::ProtoToNetworkMessage(const CoordinatorNodeMessage* proto_msg) {
+        if (!proto_msg) {
+            throw std::invalid_argument("Proto message is null");
         }
         
-        // SigningResponse 특별 처리
-        if (response.messageType == MessageType::SIGNING_REQUEST) {
-            const SigningResponse* signingResponse = 
-                dynamic_cast<const SigningResponse*>(&response);
-            if (signingResponse && signingResponse->success) {
-                payload += "|signature=" + signingResponse->signature;
-                payload += "|keyId=" + signingResponse->keyId;
-                payload += "|shardIndex=" + std::to_string(signingResponse->shardIndex);
-            }
+        // Proto 메시지 직렬화
+        std::string serialized;
+        if (!proto_msg->SerializeToString(&serialized)) {
+            throw std::runtime_error("Failed to serialize protobuf message");
         }
         
-        return NetworkMessage(
-            static_cast<uint16_t>(response.messageType), 
-            payload
-        );
+        // NetworkMessage 생성
+        NetworkMessage network_msg;
+        network_msg.header.message_type = static_cast<uint16_t>(proto_msg->message_type());
+        network_msg.header.body_length = static_cast<uint32_t>(serialized.size());
+        network_msg.body.assign(serialized.begin(), serialized.end());
+        
+        // Checksum 계산
+        network_msg.header.checksum = MessageHeader::ComputeChecksum(network_msg.body);
+        
+        return network_msg;
     }
 
     NetworkMessage NodeServer::CreateErrorResponse(uint16_t messageType, const std::string& errorMessage) {

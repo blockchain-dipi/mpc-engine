@@ -1,0 +1,13 @@
+syntax = "proto3";
+package mpc_engine.proto.coordinator_node;
+
+import "common.proto";
+import "signing.proto";
+
+message CoordinatorNodeMessage {
+    int32 message_type = 1;
+    oneof payload {
+        SigningRequest signing_request = 2;
+        SigningResponse signing_response = 3;
+    }
+}

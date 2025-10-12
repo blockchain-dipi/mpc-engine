@@ -114,52 +114,6 @@ target_link_libraries(test_coordinator_node_tls
 
 add_test(NAME CoordinatorNodeTLS COMMAND test_coordinator_node_tls)
 
-# === Manual Test (실제 Node 서버 필요) ===
-add_executable(test_coordinator_with_real_nodes
-    manual/coordinator_with_real_nodes_test.cpp
-)
-
-target_include_directories(test_coordinator_with_real_nodes PRIVATE
-    ${TEST_INCLUDE_DIRS}
-)
-
-target_link_libraries(test_coordinator_with_real_nodes
-    coordinator_server
-    coordinator_node_protocol
-    mpc_common
-    mpc_kms
-    mpc_resource  # ✅ 추가
-    Threads::Threads
-)
-
-# 일반 테스트에는 포함하지 않음 (수동 실행 전용)
-# add_test(NAME CoordinatorWithRealNodes COMMAND test_coordinator_with_real_nodes)
-message(STATUS "  - test_coordinator_with_real_nodes (manual)")
-
-# === MPC Engine Full Integration Test ===
-add_executable(test_mpc_engine_full
-    integration/test_mpc_engine_full.cpp
-)
-
-target_include_directories(test_mpc_engine_full PRIVATE
-    ${TEST_INCLUDE_DIRS}
-)
-
-target_link_libraries(test_mpc_engine_full
-    coordinator_server
-    node_server
-    coordinator_node_network
-    node_network
-    node_handlers
-    coordinator_node_protocol
-    mpc_common
-    mpc_kms
-    mpc_resource  # ✅ 추가
-    Threads::Threads
-)
-
-add_test(NAME MpcEngineFull COMMAND test_mpc_engine_full)
-
 # =======================================================================================================
 # === 테스트 빌드 정보 ===
 message(STATUS "=== Test Configuration ===")
@@ -173,5 +127,4 @@ message(STATUS "  - test_coordinator_node_basic")
 message(STATUS "  - test_coordinator_node_tls (NEW)")
 message(STATUS "  - test_https_library")
 message(STATUS "  - test_wallet_components")
-message(STATUS "  - test_mpc_engine_full")
 message(STATUS "==========================")

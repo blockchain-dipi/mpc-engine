@@ -229,7 +229,7 @@ namespace mpc_engine::coordinator::network
         std::cout << "[NodeTcpClient] Disconnected from " << node_id_copy << std::endl;
     }
 
-    AsyncRequestResult NodeTcpClient::SendRequestAsync(const protocol::coordinator_node::BaseRequest* request) {
+    AsyncRequestResult NodeTcpClient::SendRequestAsync(const CoordinatorNodeMessage* request) {
         if (!request) {
             throw std::invalid_argument("Request is null");
         }
@@ -276,7 +276,7 @@ namespace mpc_engine::coordinator::network
         return AsyncRequestResult{req_id, std::move(future)};
     }
 
-    std::unique_ptr<BaseResponse> NodeTcpClient::SendRequest(const BaseRequest* request) {
+    std::unique_ptr<CoordinatorNodeMessage> NodeTcpClient::SendRequest(const CoordinatorNodeMessage* request) {
         if (!request) {
             return nullptr;
         }
@@ -617,15 +617,42 @@ namespace mpc_engine::coordinator::network
         }
     }
 
-    NetworkMessage NodeTcpClient::ConvertToNetworkMessage(const BaseRequest* request) {
-        return NetworkMessage(static_cast<uint16_t>(request->messageType), "REQ");
+    NetworkMessage NodeTcpClient::ConvertToNetworkMessage(const CoordinatorNodeMessage* request) {
+        if (!request) {
+        throw std::invalid_argument("Request is null");
+        }
+    
+        // Proto 메시지를 직렬화
+        std::string serialized;
+        if (!request->SerializeToString(&serialized)) {
+            throw std::runtime_error("Failed to serialize protobuf message");
+        }
+    
+        // NetworkMessage 생성
+        NetworkMessage msg;
+        msg.header.message_type = static_cast<uint16_t>(request->message_type());
+        msg.header.body_length = static_cast<uint32_t>(serialized.size());
+        
+        // 직렬화된 데이터를 body에 복사
+        msg.body.assign(serialized.begin(), serialized.end());
+    
+        // Checksum 계산
+        msg.header.checksum = MessageHeader::ComputeChecksum(msg.body);
+
+        return msg;
     }
 
-    std::unique_ptr<BaseResponse> NodeTcpClient::ConvertFromNetworkMessage(const NetworkMessage& message) {
-        auto response = std::make_unique<BaseResponse>(
-            static_cast<MessageType>(message.header.message_type)
-        );
-        response->success = true;
+    std::unique_ptr<CoordinatorNodeMessage> NodeTcpClient::ConvertFromNetworkMessage(const NetworkMessage& message) {
+        auto response = std::make_unique<CoordinatorNodeMessage>();
+
+        // body에서 Proto 메시지 역직렬화
+        if (!message.body.empty()) {
+            if (!response->ParseFromArray(message.body.data(), message.body.size())) {
+                std::cerr << "[NodeTcpClient] Failed to parse protobuf message" << std::endl;
+                return nullptr;
+            }
+        }
+    
         return response;
     }
 

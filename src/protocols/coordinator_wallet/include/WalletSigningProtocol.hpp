@@ -13,7 +13,7 @@ namespace mpc_engine::protocol::coordinator_wallet
         uint32_t totalShards = 3;
         std::vector<std::string> requiredShards;
         
-        WalletSigningRequest() : WalletBaseRequest(WalletMessageType::SIGNING_REQUEST) {}        
+        WalletSigningRequest() : WalletBaseRequest(mpc_engine::WalletMessageType::SIGNING_REQUEST) {}        
         std::string ToJson() const override;
     };
 
@@ -24,7 +24,7 @@ namespace mpc_engine::protocol::coordinator_wallet
         std::vector<std::string> shardSignatures;
         uint32_t successfulShards = 0;
         
-        WalletSigningResponse() : WalletBaseResponse(WalletMessageType::SIGNING_REQUEST) {}        
+        WalletSigningResponse() : WalletBaseResponse(mpc_engine::WalletMessageType::SIGNING_REQUEST) {}        
         bool FromJson(const std::string& json) override;
     };
 }

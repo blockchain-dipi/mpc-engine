@@ -1,0 +1,14 @@
+syntax = "proto3";
+package mpc_engine.proto.coordinator_node;
+
+message RequestHeader {
+    string uid = 1;
+    string send_time = 2;
+    uint64 request_id = 3;
+}
+
+message ResponseHeader {
+    bool success = 1;
+    string error_message = 2;
+    uint64 request_id = 3;
+}
