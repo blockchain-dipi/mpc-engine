@@ -4,14 +4,12 @@
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include "common/network/https/include/HttpsConnectionPool.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
-#include "types/WalletMessageType.hpp"
 #include <memory>
 #include <mutex>
 #include <atomic>
 
 namespace mpc_engine::coordinator::network
 {
-    using namespace mpc_engine::protocol::coordinator_wallet;    
     using namespace mpc_engine::coordinator::handlers::wallet;
     using namespace mpc_engine::network::tls;
     using namespace mpc_engine::network::https;

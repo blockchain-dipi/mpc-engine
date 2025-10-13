@@ -1,25 +1,19 @@
 // src/coordinator/handlers/wallet/include/WalletMessageRouter.hpp
 #pragma once
-#include "protocols/coordinator_wallet/include/WalletBaseProtocol.hpp"
+#include "proto/wallet_coordinator/generated/wallet_message.pb.h"
+#include "types/WalletMessageType.hpp"
 #include <array>
 #include <functional>
 #include <memory>
 
 namespace mpc_engine::coordinator::handlers::wallet
 {
-    using namespace protocol::coordinator_wallet;
+    using namespace mpc_engine::proto::wallet_coordinator;
 
-    /**
-     * @brief Wallet Message Router
-     * 
-     * - Node의 NodeMessageRouter와 동일한 패턴
-     * - WalletMessageType → Handler 함수 매핑
-     * - O(1) 라우팅
-     */
     class WalletMessageRouter 
     {
     public:
-        using HandlerFunction = std::function<std::unique_ptr<WalletBaseResponse>(const WalletBaseRequest*)>;
+        using HandlerFunction = std::function<std::unique_ptr<WalletCoordinatorMessage>(const WalletCoordinatorMessage*)>;
 
         static WalletMessageRouter& Instance() 
         {
@@ -27,22 +21,8 @@ namespace mpc_engine::coordinator::handlers::wallet
             return instance;
         }
 
-        /**
-         * @brief Router 초기화 (Handler 등록)
-         */
         bool Initialize();
-
-        /**
-         * @brief 메시지 처리
-         * 
-         * @param type WalletMessageType
-         * @param request 요청 객체
-         * @return 응답 객체 (실패 시 nullptr)
-         */
-        std::unique_ptr<WalletBaseResponse> ProcessMessage(
-            mpc_engine::WalletMessageType type,
-            const WalletBaseRequest* request
-        );
+        std::unique_ptr<WalletCoordinatorMessage> ProcessMessage(const WalletCoordinatorMessage* request);
 
     private:
         WalletMessageRouter() = default;

@@ -1,4 +1,4 @@
-# scripts/generate_proto.sh
+# scripts/generate_proto_wallet_coordinator.sh
 #!/bin/bash
 
 set -e
@@ -13,17 +13,17 @@ if ! command -v protoc &> /dev/null; then
     exit 1
 fi
 
-echo "=== Generating Protocol Buffer files ==="
+echo "=== Generating Wallet-Coordinator Protocol Buffer files ==="
 
-# Coordinator-Node proto 파일들 생성
+# Wallet-Coordinator proto 파일들 생성
 PROTO_FILES=(
-    "coordinator_node/common.proto"
-    "coordinator_node/signing.proto"
-    "coordinator_node/message.proto"
+    "wallet_coordinator/wallet_common.proto"
+    "wallet_coordinator/wallet_signing.proto"
+    "wallet_coordinator/wallet_message.proto"
 )
 
 for proto_file in "${PROTO_FILES[@]}"; do
-    # 출력 디렉토리 추출 (예: coordinator_node)
+    # 출력 디렉토리 추출 (예: wallet_coordinator)
     proto_dir=$(dirname "$proto_file")
     output_dir="${PROTO_SRC_DIR}/${proto_dir}/generated"
     
@@ -38,9 +38,12 @@ for proto_file in "${PROTO_FILES[@]}"; do
 done
 
 echo ""
-echo "✅ Proto generation completed!"
+echo "✅ Wallet-Coordinator Proto generation completed!"
 echo ""
 echo "Generated files:"
 
-# 모든 generated 폴더에서 생성된 파일 찾기
-find "${PROTO_SRC_DIR}" -path "*/generated/*.pb.h" -o -path "*/generated/*.pb.cc" 2>/dev/null | sort || echo "No files generated"
+# wallet_coordinator/generated 폴더의 생성된 파일 찾기
+find "${PROTO_SRC_DIR}/wallet_coordinator/generated" -name "*.pb.h" -o -name "*.pb.cc" 2>/dev/null | sort || echo "No files generated"
+
+echo ""
+echo "Location: ${PROTO_SRC_DIR}/wallet_coordinator/generated/"

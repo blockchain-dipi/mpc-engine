@@ -1,0 +1,26 @@
+// src/proto/wallet_coordinator/wallet_signing.proto
+syntax = "proto3";
+package mpc_engine.proto.wallet_coordinator;
+
+import "wallet_common.proto";
+
+// 서명 요청 메시지
+message WalletSigningRequest {
+    WalletRequestHeader header = 1;
+    
+    string key_id = 2;
+    string transaction_data = 3;
+    uint32 threshold = 4;
+    uint32 total_shards = 5;
+    repeated string required_shards = 6;
+}
+
+// 서명 응답 메시지
+message WalletSigningResponse {
+    WalletResponseHeader header = 1;
+    
+    string key_id = 2;
+    string final_signature = 3;
+    repeated string shard_signatures = 4;
+    uint32 successful_shards = 5;
+}

@@ -5,8 +5,6 @@
 
 namespace mpc_engine::coordinator::handlers::wallet
 {
-    using namespace protocol::coordinator_wallet;
-
     bool WalletMessageRouter::Initialize() 
     {
         if (initialized) {
@@ -27,10 +25,7 @@ namespace mpc_engine::coordinator::handlers::wallet
         return true;
     }
 
-    std::unique_ptr<WalletBaseResponse> WalletMessageRouter::ProcessMessage(
-        mpc_engine::WalletMessageType type,
-        const WalletBaseRequest* request
-    ) 
+    std::unique_ptr<WalletCoordinatorMessage> WalletMessageRouter::ProcessMessage(const WalletCoordinatorMessage* request) 
     {
         if (!initialized) {
             std::cerr << "[WalletMessageRouter] Not initialized" << std::endl;
@@ -42,22 +37,27 @@ namespace mpc_engine::coordinator::handlers::wallet
             return nullptr;
         }
 
+        uint32_t message_type = request->message_type();
+        
+        // WalletMessageType으로 변환
+        auto type = static_cast<mpc_engine::WalletMessageType>(message_type);
         size_t index = static_cast<size_t>(type);
 
         // 범위 체크
         if (index >= static_cast<size_t>(mpc_engine::WalletMessageType::MAX_MESSAGE_TYPE)) {
-            std::cerr << "[WalletMessageRouter] Invalid message type: " 
-                      << static_cast<uint32_t>(type) << std::endl;
+            std::cerr << "[WalletMessageRouter] Invalid message type: " << message_type << std::endl;
             return nullptr;
         }
 
         // 핸들러 존재 체크
         if (!handlers_[index]) {
-            std::cerr << "[WalletMessageRouter] No handler for message type: " << WalletMessageTypeToString(type) << std::endl;
+            std::cerr << "[WalletMessageRouter] No handler for message type: " 
+                      << WalletMessageTypeToString(type) << std::endl;
             return nullptr;
         }
 
-        std::cout << "[WalletMessageRouter] Processing message type: " << WalletMessageTypeToString(type) << std::endl;
+        std::cout << "[WalletMessageRouter] Processing message type: " 
+                  << WalletMessageTypeToString(type) << std::endl;
 
         return handlers_[index](request);
     }

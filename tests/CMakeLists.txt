@@ -67,26 +67,6 @@ target_link_libraries(test_https_library
 
 add_test(NAME HttpsLibrary COMMAND test_https_library)
 
-# === Wallet Components Unit Test ===
-add_executable(test_wallet_components
-    unit/wallet/test_wallet_components.cpp
-)
-
-target_include_directories(test_wallet_components PRIVATE
-    ${TEST_INCLUDE_DIRS}
-)
-
-target_link_libraries(test_wallet_components
-    coordinator_wallet_network
-    coordinator_wallet_handlers
-    coordinator_wallet_protocol
-    mpc_common
-    nlohmann_json::nlohmann_json
-    Threads::Threads
-)
-
-add_test(NAME WalletComponents COMMAND test_wallet_components)
-
 # integration 테스트 ==========================================================================================
 # === NEW: TLS Integration Test ===
 add_executable(test_coordinator_node_tls
@@ -114,6 +94,35 @@ target_link_libraries(test_coordinator_node_tls
 
 add_test(NAME CoordinatorNodeTLS COMMAND test_coordinator_node_tls)
 
+# === E2E Integration Test: Wallet ↔ Coordinator ↔ Node ===
+add_executable(test_wallet_coordinator_node_integration
+    integration/test_wallet_coordinator_node_integration.cpp
+)
+
+target_include_directories(test_wallet_coordinator_node_integration PRIVATE
+    ${TEST_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_wallet_coordinator_node_integration
+    coordinator_server
+    node_server
+    coordinator_node_network
+    coordinator_wallet_network
+    coordinator_wallet_handlers
+    node_network
+    node_handlers
+    proto_coordinator_node
+    proto_wallet_coordinator
+    mpc_common
+    mpc_kms
+    mpc_resource
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    Threads::Threads
+)
+
+add_test(NAME WalletCoordinatorNodeE2E COMMAND test_wallet_coordinator_node_integration)
+
 # =======================================================================================================
 # === 테스트 빌드 정보 ===
 message(STATUS "=== Test Configuration ===")
@@ -124,7 +133,7 @@ message(STATUS "  - test_socket_io")
 message(STATUS "  - test_node_tcp_server")
 message(STATUS "  - test_message_validation")
 message(STATUS "  - test_coordinator_node_basic")
-message(STATUS "  - test_coordinator_node_tls (NEW)")
+message(STATUS "  - test_coordinator_node_tls")
+message(STATUS "  - test_wallet_coordinator_node_integration")
 message(STATUS "  - test_https_library")
-message(STATUS "  - test_wallet_components")
 message(STATUS "==========================")

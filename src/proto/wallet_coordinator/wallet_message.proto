@@ -1,0 +1,16 @@
+// src/proto/wallet_coordinator/wallet_message.proto
+syntax = "proto3";
+package mpc_engine.proto.wallet_coordinator;
+
+import "wallet_common.proto";
+import "wallet_signing.proto";
+
+// Wallet-Coordinator 간 메시지 래퍼
+message WalletCoordinatorMessage {
+    uint32 message_type = 1;  // WalletMessageType enum 값
+    
+    oneof payload {
+        WalletSigningRequest signing_request = 2;
+        WalletSigningResponse signing_response = 3;
+    }
+}

@@ -1,5 +1,5 @@
+// src/proto/coordinator_node/message.proto
 syntax = "proto3";
-
 package mpc_engine.proto.coordinator_node;
 
 import "common.proto";

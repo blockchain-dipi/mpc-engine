@@ -31,12 +31,28 @@ set(PROTO_GEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/proto/coordinator_node/generat
 file(GLOB PROTO_SRCS "${PROTO_GEN_DIR}/*.pb.cc")
 file(GLOB PROTO_HDRS "${PROTO_GEN_DIR}/*.pb.h")
 
-add_library(mpc_proto STATIC ${PROTO_SRCS})
-target_include_directories(mpc_proto PUBLIC
+add_library(proto_coordinator_node STATIC ${PROTO_SRCS})
+target_include_directories(proto_coordinator_node PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/proto
     ${Protobuf_INCLUDE_DIRS}
 )
-target_link_libraries(mpc_proto
+target_link_libraries(proto_coordinator_node
+    ${Protobuf_LIBRARIES}
+)
+
+# === Wallet-Coordinator Proto 라이브러리 ===
+set(WALLET_PROTO_GEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/proto/wallet_coordinator/generated)
+
+# Proto 생성 파일들 자동 수집
+file(GLOB WALLET_PROTO_SRCS "${WALLET_PROTO_GEN_DIR}/*.pb.cc")
+file(GLOB WALLET_PROTO_HDRS "${WALLET_PROTO_GEN_DIR}/*.pb.h")
+
+add_library(proto_wallet_coordinator STATIC ${WALLET_PROTO_SRCS})
+target_include_directories(proto_wallet_coordinator PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/proto
+    ${Protobuf_INCLUDE_DIRS}
+)
+target_link_libraries(proto_wallet_coordinator
     ${Protobuf_LIBRARIES}
 )
 
@@ -94,17 +110,6 @@ add_library(coordinator_node_protocol STATIC
 target_include_directories(coordinator_node_protocol PUBLIC src)
 target_link_libraries(coordinator_node_protocol mpc_common)
 
-# === Wallet 프로토콜 ===
-add_library(coordinator_wallet_protocol STATIC
-    src/protocols/coordinator_wallet/src/WalletSigningProtocol.cpp
-)
-
-target_include_directories(coordinator_wallet_protocol PUBLIC src)
-target_link_libraries(coordinator_wallet_protocol 
-    mpc_common
-    nlohmann_json::nlohmann_json
-)
-
 # === Coordinator Wallet 핸들러 ===
 add_library(coordinator_wallet_handlers STATIC
     src/coordinator/handlers/wallet/src/WalletSigningHandler.cpp
@@ -112,7 +117,7 @@ add_library(coordinator_wallet_handlers STATIC
 
 target_include_directories(coordinator_wallet_handlers PUBLIC src)
 target_link_libraries(coordinator_wallet_handlers
-    coordinator_wallet_protocol
+    proto_wallet_coordinator
     mpc_common
     nlohmann_json::nlohmann_json
 )
@@ -125,9 +130,8 @@ add_library(node_handlers STATIC
 
 target_include_directories(node_handlers PUBLIC src)
 target_link_libraries(node_handlers 
-    mpc_proto
-    mpc_common 
-    # coordinator_node_protocol
+    proto_coordinator_node
+    mpc_common
 )
 
 # === Node 네트워크 ===
@@ -138,9 +142,8 @@ add_library(node_network STATIC
 
 target_include_directories(node_network PUBLIC src)
 target_link_libraries(node_network 
-    mpc_proto
-    mpc_common 
-    # coordinator_node_protocol
+    proto_coordinator_node
+    mpc_common
     Threads::Threads
 )
 
@@ -152,9 +155,8 @@ add_library(coordinator_node_network STATIC
 
 target_include_directories(coordinator_node_network PUBLIC src)
 target_link_libraries(coordinator_node_network 
-    mpc_proto
-    mpc_common 
-    # coordinator_node_protocol
+    proto_coordinator_node
+    mpc_common
     mpc_kms
     Threads::Threads
 )
@@ -169,7 +171,7 @@ src/coordinator/handlers/wallet/src/WalletMessageRouter.cpp
 target_include_directories(coordinator_wallet_network PUBLIC src)
 target_link_libraries(coordinator_wallet_network
     mpc_common
-    coordinator_wallet_protocol
+    proto_wallet_coordinator
     coordinator_wallet_handlers
     nlohmann_json::nlohmann_json
     OpenSSL::SSL
@@ -186,9 +188,8 @@ target_include_directories(node_server PUBLIC src)
 target_link_libraries(node_server 
     node_network
     node_handlers
-    mpc_proto
+    proto_coordinator_node
     mpc_common
-    # coordinator_node_protocol
     mpc_kms
     Threads::Threads
 )
@@ -202,9 +203,8 @@ target_include_directories(coordinator_server PUBLIC src)
 target_link_libraries(coordinator_server
     coordinator_node_network
     coordinator_wallet_network
-    # coordinator_node_protocol
-    coordinator_wallet_protocol
-    mpc_proto
+    proto_coordinator_node
+    proto_wallet_coordinator
     mpc_common
     mpc_kms
     Threads::Threads
@@ -228,7 +228,6 @@ add_executable(coordinator
 
 target_link_libraries(coordinator
     coordinator_server
-    coordinator_wallet_protocol
     mpc_kms
     mpc_resource
 )

@@ -1,17 +1,11 @@
 // src/coordinator/handlers/wallet/include/WalletSigningHandler.hpp
 #pragma once
-#include "protocols/coordinator_wallet/include/WalletBaseProtocol.hpp"
+#include "proto/wallet_coordinator/generated/wallet_message.pb.h"
 #include <memory>
 
 namespace mpc_engine::coordinator::handlers::wallet
 {
-    /**
-     * @brief Wallet 서명 요청 처리
-     * 
-     * @param request WalletSigningRequest
-     * @return WalletSigningResponse (Mock 데이터)
-     */
-    std::unique_ptr<protocol::coordinator_wallet::WalletBaseResponse> 
-    HandleWalletSigningRequest(const protocol::coordinator_wallet::WalletBaseRequest* request);
+    using namespace mpc_engine::proto::wallet_coordinator;
+    std::unique_ptr<WalletCoordinatorMessage> HandleWalletSigningRequest(const WalletCoordinatorMessage* request);
 
 } // namespace mpc_engine::coordinator::handlers::wallet
