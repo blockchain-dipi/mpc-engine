@@ -14,7 +14,7 @@ namespace mpc_engine::utils
         NOT_JOINABLE = 2
     };
 
-    inline const char* ToString(JoinResult result) 
+    inline const char* JoinResultToString(JoinResult result) 
     {
         switch (result) {
             case JoinResult::SUCCESS: return "SUCCESS";

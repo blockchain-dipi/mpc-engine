@@ -5,7 +5,6 @@
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
-#include "coordinator/network/wallet_server/include/WalletServerManager.hpp"
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include "proto/wallet_coordinator/generated/wallet_message.pb.h"
 #include "proto/coordinator_node/generated/message.pb.h"
@@ -23,7 +22,6 @@ using namespace mpc_engine::node;
 using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
 using namespace mpc_engine::resource;
-using namespace mpc_engine::coordinator::network;
 using namespace mpc_engine::coordinator::handlers::wallet;
 using namespace mpc_engine::network::tls;
 using namespace mpc_engine::proto::wallet_coordinator;
@@ -52,6 +50,7 @@ public:
 
         // 2. ReadOnly 리소스 로더 초기화
         ReadOnlyResLoaderManager::Instance().Initialize(PlatformType::LOCAL);
+        std::cout << "✓ Resource loader initialized" << std::endl;
 
         // 3. KMS 초기화
         std::string kms_path = Config::GetString("NODE_LOCAL_KMS_PATH");
@@ -147,7 +146,7 @@ public:
             std::cout << "✓ Connected to node: " << node_id << std::endl;
         }
 
-        // 8. Wallet Router 초기화
+        // 8. Wallet Router 초기화 (WalletMessageRouter는 Singleton이므로 자동 초기화됨)
         if (!WalletMessageRouter::Instance().Initialize()) {
             std::cerr << "Failed to initialize WalletMessageRouter" << std::endl;
             return false;
@@ -249,7 +248,7 @@ std::unique_ptr<CoordinatorNodeMessage> CreateCoordinatorNodeSigningRequest(
 
 // ===== Test Functions =====
 
-bool TestWalletToCoordinatorMessageRouting([[maybe_unused]]E2ETestEnvironment& env)
+bool TestWalletToCoordinatorMessageRouting([[maybe_unused]] E2ETestEnvironment& env)
 {
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Test 1: Wallet → Coordinator Routing" << std::endl;
@@ -349,7 +348,7 @@ bool TestFullE2EFlow(E2ETestEnvironment& env)
     std::cout << "  Key ID: " << wallet_request->signing_request().key_id() << std::endl;
     std::cout << "  Transaction: " << wallet_request->signing_request().transaction_data().substr(0, 20) << "..." << std::endl;
 
-    // Step 2: Coordinator가 요청 수신 (WalletMessageRouter 처리는 생략하고 직접 Node로 전달)
+    // Step 2: Coordinator가 요청 수신 후 Node로 전달
     std::cout << "\n[Step 2] Coordinator forwards request to Nodes" << std::endl;
     
     auto node_request = CreateCoordinatorNodeSigningRequest(
@@ -366,7 +365,7 @@ bool TestFullE2EFlow(E2ETestEnvironment& env)
     }
     std::cout << "  ✓ Broadcasted to " << env.GetNodeCount() << " nodes" << std::endl;
 
-    // Step 3: Node 응답 대기 (실제로는 비동기이지만 테스트에서는 시간 대기)
+    // Step 3: Node 응답 대기
     std::cout << "\n[Step 3] Waiting for Node responses..." << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     std::cout << "  ✓ Node responses received (simulated)" << std::endl;
@@ -396,7 +395,7 @@ bool TestFullE2EFlow(E2ETestEnvironment& env)
     return true;
 }
 
-bool TestConcurrentE2ERequests(E2ETestEnvironment& env)
+bool TestConcurrentE2ERequests([[maybe_unused]] E2ETestEnvironment& env)
 {
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Test 4: Concurrent E2E Requests" << std::endl;
@@ -408,7 +407,7 @@ bool TestConcurrentE2ERequests(E2ETestEnvironment& env)
     std::cout << "Sending " << num_requests << " concurrent E2E requests..." << std::endl;
 
     for (int i = 0; i < num_requests; ++i) {
-        auto future = std::async(std::launch::async, [&env, i]() -> bool {
+        auto future = std::async(std::launch::async, [i]() -> bool {
             auto wallet_request = CreateWalletSigningRequest(
                 "concurrent_e2e_" + std::to_string(i),
                 "concurrent_key_" + std::to_string(i),

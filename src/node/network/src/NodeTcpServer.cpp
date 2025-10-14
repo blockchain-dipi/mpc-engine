@@ -214,7 +214,7 @@ namespace mpc_engine::node::network
         // Connection thread
         if (connection_thread.joinable()) {
             utils::JoinResult result = utils::JoinWithTimeout(connection_thread, THREAD_JOIN_TIMEOUT_MS);
-            std::cout << "  Connection thread: " << utils::ToString(result) << std::endl;
+            std::cout << "  Connection thread: " << utils::JoinResultToString(result) << std::endl;
             
             if (result == utils::JoinResult::TIMEOUT) {
                 std::cerr << "  ⚠️  Connection thread did not stop in time!" << std::endl;
@@ -224,7 +224,7 @@ namespace mpc_engine::node::network
         // Receive thread
         if (receive_thread.joinable()) {
             utils::JoinResult result = utils::JoinWithTimeout(receive_thread, THREAD_JOIN_TIMEOUT_MS);
-            std::cout << "  Receive thread: " << utils::ToString(result) << std::endl;
+            std::cout << "  Receive thread: " << utils::JoinResultToString(result) << std::endl;
             
             if (result == utils::JoinResult::TIMEOUT) {
                 std::cerr << "  ⚠️  Receive thread did not stop in time!" << std::endl;
@@ -234,7 +234,7 @@ namespace mpc_engine::node::network
         // Send thread
         if (send_thread.joinable()) {
             utils::JoinResult result = utils::JoinWithTimeout(send_thread, THREAD_JOIN_TIMEOUT_MS);
-            std::cout << "  Send thread: " << utils::ToString(result) << std::endl;
+            std::cout << "  Send thread: " << utils::JoinResultToString(result) << std::endl;
             
             if (result == utils::JoinResult::TIMEOUT) {
                 std::cerr << "  ⚠️  Send thread did not stop in time!" << std::endl;
@@ -463,8 +463,7 @@ namespace mpc_engine::node::network
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push error response: " 
-                              << utils::ToString(result) << std::endl;
+                    std::cerr << "[ERROR] Failed to push error response: " << utils::QueueResultToString(result) << std::endl;
                 }
 
                 break;
@@ -478,8 +477,7 @@ namespace mpc_engine::node::network
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push error response: " 
-                              << utils::ToString(result) << std::endl;
+                    std::cerr << "[ERROR] Failed to push error response: " << utils::QueueResultToString(result) << std::endl;
                 }
 
                 handler_errors++;
@@ -557,7 +555,7 @@ namespace mpc_engine::node::network
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
+                    std::cerr << "[ERROR] Failed to push response: " << utils::QueueResultToString(result) << std::endl;
                 }
                 return;
             }
@@ -576,7 +574,7 @@ namespace mpc_engine::node::network
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
+                    std::cerr << "[ERROR] Failed to push response: " << utils::QueueResultToString(result) << std::endl;
                 }
                 return;
             }
@@ -594,7 +592,7 @@ namespace mpc_engine::node::network
             );
 
             if (result != utils::QueueResult::SUCCESS) {
-                std::cerr << "[ERROR] Failed to push response: " << utils::ToString(result) << std::endl;
+                std::cerr << "[ERROR] Failed to push response: " << utils::QueueResultToString(result) << std::endl;
             }
 
         } catch (const std::exception& e) {

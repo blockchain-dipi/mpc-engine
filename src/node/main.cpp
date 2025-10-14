@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
         if (config.platform_type == PlatformType::LOCAL) {
             kms_config_path = Config::GetString("NODE_LOCAL_KMS_PATH");
         }
-        KMSManager::InitializeLocal(PlatformType::UNKNOWN, kms_config_path); // 기본값 설정
+        KMSManager::InitializeLocal(config.platform_type, kms_config_path); // 기본값 설정
         std::cout << "✓ KMS initialized successfully" << std::endl;
 
         // NodeServer 생성

@@ -266,7 +266,7 @@ namespace mpc_engine::coordinator::network
             }
 
             throw std::runtime_error(
-                "Failed to push request to queue: " + std::string(utils::ToString(result))
+                "Failed to push request to queue: " + std::string(utils::QueueResultToString(result))
             );
         }
 
@@ -534,7 +534,7 @@ namespace mpc_engine::coordinator::network
 
             if (result != utils::QueueResult::SUCCESS) {
                 std::cerr << "[NodeTcpClient::SendLoop] Pop failed: " 
-                          << utils::ToString(result) << std::endl;
+                          << utils::QueueResultToString(result) << std::endl;
                 break;
             }
 
@@ -655,48 +655,4 @@ namespace mpc_engine::coordinator::network
     
         return response;
     }
-
-    // bool NodeTcpClient::SendRaw(const void* data, size_t length) {
-    //     size_t bytes_sent = 0;
-        
-    //     utils::SocketIOResult result = utils::SendExact(
-    //         connection_info.node_socket,
-    //         data,
-    //         length,
-    //         &bytes_sent
-    //     );
-
-    //     if (result != utils::SocketIOResult::SUCCESS) {
-    //         std::cerr << "[NodeTcpClient] Send failed: " 
-    //                   << utils::ToString(result)
-    //                   << " (sent: " << bytes_sent << "/" << length << " bytes)" << std::endl;
-    //         return false;
-    //     }
-
-    //     return true;
-    // }
-
-    // bool NodeTcpClient::ReceiveRaw(void* buffer, size_t length) {
-    //     size_t bytes_received = 0;
-        
-    //     utils::SocketIOResult result = utils::ReceiveExact(
-    //         connection_info.node_socket,
-    //         buffer,
-    //         length,
-    //         &bytes_received
-    //     );
-
-    //     if (result != utils::SocketIOResult::SUCCESS) {
-    //         if (result == utils::SocketIOResult::CONNECTION_CLOSED) {
-    //             std::cout << "[NodeTcpClient] Connection closed by Node server" << std::endl;
-    //         } else {
-    //             std::cerr << "[NodeTcpClient] Receive failed: " 
-    //                       << utils::ToString(result)
-    //                       << " (received: " << bytes_received << "/" << length << " bytes)" << std::endl;
-    //         }
-    //         return false;
-    //     }
-
-    //     return true;
-    // }
 }

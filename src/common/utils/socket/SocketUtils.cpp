@@ -260,7 +260,7 @@ namespace mpc_engine::utils
         return SocketIOResult::SUCCESS;
     }
 
-    const char* ToString(SocketIOResult result)
+    const char* SocketIOResultToString(SocketIOResult result)
     {
         switch (result) {
             case SocketIOResult::SUCCESS:

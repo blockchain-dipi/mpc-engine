@@ -117,8 +117,8 @@ bool TestShutdown() {
     assert(consumer_result == QueueResult::SHUTDOWN);
     assert(queue.IsShutdown());
     
-    std::cout << "  Producer result: " << ToString(producer_result.load()) << std::endl;
-    std::cout << "  Consumer result: " << ToString(consumer_result.load()) << std::endl;
+    std::cout << "  Producer result: " << QueueResultToString(producer_result.load()) << std::endl;
+    std::cout << "  Consumer result: " << QueueResultToString(consumer_result.load()) << std::endl;
     std::cout << "  Consumed: " << consumed_count << " items" << std::endl;
     
     return true;
@@ -126,10 +126,10 @@ bool TestShutdown() {
 
 // Test 5: ToString 테스트
 bool TestToString() {
-    assert(std::string(ToString(QueueResult::SUCCESS)) == "SUCCESS");
-    assert(std::string(ToString(QueueResult::SHUTDOWN)) == "SHUTDOWN");
-    assert(std::string(ToString(QueueResult::TIMEOUT)) == "TIMEOUT");
-    assert(std::string(ToString(QueueResult::FULL)) == "FULL");
+    assert(std::string(QueueResultToString(QueueResult::SUCCESS)) == "SUCCESS");
+    assert(std::string(QueueResultToString(QueueResult::SHUTDOWN)) == "SHUTDOWN");
+    assert(std::string(QueueResultToString(QueueResult::TIMEOUT)) == "TIMEOUT");
+    assert(std::string(QueueResultToString(QueueResult::FULL)) == "FULL");
     
     return true;
 }
@@ -230,8 +230,8 @@ bool TestShutdownPushPop() {
     QueueResult pop_result2 = queue.Pop(value);
     assert(pop_result2 == QueueResult::SHUTDOWN);
     
-    std::cout << "  Push after shutdown: " << ToString(push_result) << std::endl;
-    std::cout << "  Pop after empty: " << ToString(pop_result2) << std::endl;
+    std::cout << "  Push after shutdown: " << QueueResultToString(push_result) << std::endl;
+    std::cout << "  Pop after empty: " << QueueResultToString(pop_result2) << std::endl;
     
     return true;
 }

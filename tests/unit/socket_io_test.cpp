@@ -337,9 +337,9 @@ bool TestLargeData() {
 // Test 6: 헬퍼 함수 테스트
 bool TestHelperFunctions() {
     // ToString 테스트
-    assert(std::string(ToString(SocketIOResult::SUCCESS)) == "SUCCESS");
-    assert(std::string(ToString(SocketIOResult::CONNECTION_CLOSED)) == "CONNECTION_CLOSED");
-    assert(std::string(ToString(SocketIOResult::TIMEOUT)) == "TIMEOUT");
+    assert(std::string(SocketIOResultToString(SocketIOResult::SUCCESS)) == "SUCCESS");
+    assert(std::string(SocketIOResultToString(SocketIOResult::CONNECTION_CLOSED)) == "CONNECTION_CLOSED");
+    assert(std::string(SocketIOResultToString(SocketIOResult::TIMEOUT)) == "TIMEOUT");
     
     // IsFatalError 테스트
     assert(!IsFatalError(SocketIOResult::SUCCESS));

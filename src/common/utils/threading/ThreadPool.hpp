@@ -168,8 +168,7 @@ namespace mpc_engine::utils
                 }
                 
                 if (result != QueueResult::SUCCESS) {
-                    fprintf(stderr, "[ThreadPool Worker %zu] Unexpected pop result: %s\n", 
-                            worker_id, ToString(result));
+                    fprintf(stderr, "[ThreadPool Worker %zu] Unexpected pop result: %s\n", worker_id, QueueResultToString(result));
                     break;
                 }
 

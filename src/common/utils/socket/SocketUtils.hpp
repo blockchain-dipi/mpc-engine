@@ -48,7 +48,7 @@ namespace mpc_engine::utils
     SocketIOResult SendExact(socket_t sock, const void* data, size_t length, size_t* bytes_sent = nullptr);
     
     // SocketIOResult를 문자열로 변환
-    const char* ToString(SocketIOResult result);
+    const char* SocketIOResultToString(SocketIOResult result);
     
     // SocketIOResult가 치명적 에러인지 확인
     bool IsFatalError(SocketIOResult result);

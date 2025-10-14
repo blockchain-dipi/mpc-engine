@@ -40,7 +40,7 @@ namespace mpc_engine::network::tls
         SSL_ERROR = 10
     };
 
-    inline const char* ToString(TlsConnectionState state) 
+    inline const char* TlsConnectionStateToString(TlsConnectionState state) 
     {
         switch (state) {
             case TlsConnectionState::DISCONNECTED: return "DISCONNECTED";
@@ -53,7 +53,7 @@ namespace mpc_engine::network::tls
         }
     }
 
-    inline const char* ToString(TlsError error) 
+    inline const char* TlsErrorToString(TlsError error) 
     {
         switch (error) {
             case TlsError::NONE: return "NONE";

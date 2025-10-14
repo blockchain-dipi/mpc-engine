@@ -1,10 +1,9 @@
 // src/coordinator/CoordinatorServer.hpp
 #pragma once
 #include "coordinator/network/node_client/include/NodeTcpClient.hpp"
-#include "coordinator/network/wallet_server/include/WalletServerManager.hpp"
+#include "coordinator/network/wallet_server/include/CoordinatorHttpsServer.hpp"
 #include "proto/coordinator_node/generated/message.pb.h"
 #include "types/MessageTypes.hpp"
-#include "types/WalletMessageType.hpp"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -34,8 +33,8 @@ namespace mpc_engine::coordinator
         std::unordered_map<std::string, std::unique_ptr<network::NodeTcpClient>> node_clients;
         mutable std::mutex nodes_mutex;
 
-        // Wallet Server Manager (Singleton 참조)
-        network::WalletServerManager& wallet_manager_ = network::WalletServerManager::Instance();
+        // HTTPS 서버 (Wallet Server 통신용)
+        std::unique_ptr<network::wallet_server::CoordinatorHttpsServer> https_server;
 
         std::atomic<bool> is_running{false};
         std::atomic<bool> is_initialized{false};
@@ -51,11 +50,13 @@ namespace mpc_engine::coordinator
 
         static CoordinatorServer& Instance();
 
+        // 기본 라이프사이클
         bool Initialize();
         bool Start();
         void Stop();
         bool IsRunning() const;
 
+        // Node 관리
         bool RegisterNode(const std::string& node_id,
             PlatformType platform,
             const std::string& address,
@@ -65,15 +66,24 @@ namespace mpc_engine::coordinator
         void UnregisterNode(const std::string& node_id);
         bool HasNode(const std::string& node_id) const;
 
+        // Node 연결
         bool ConnectToNode(const std::string& node_id);
         void DisconnectFromNode(const std::string& node_id);
         bool IsNodeConnected(const std::string& node_id) const;
         void DisconnectAllNodes();
 
-        std::unique_ptr<CoordinatorNodeMessage> SendToNode(const std::string& node_id, const CoordinatorNodeMessage* request);        
-        bool BroadcastToNodes(const std::vector<std::string>& node_ids, const CoordinatorNodeMessage* request);        
+        // Node 통신
+        std::unique_ptr<CoordinatorNodeMessage> SendToNode(
+            const std::string& node_id, 
+            const CoordinatorNodeMessage* request);
+        
+        bool BroadcastToNodes(
+            const std::vector<std::string>& node_ids, 
+            const CoordinatorNodeMessage* request);
+        
         bool BroadcastToAllConnectedNodes(const CoordinatorNodeMessage* request);
 
+        // Node 상태 조회
         std::vector<std::string> GetConnectedNodeIds() const;
         std::vector<std::string> GetReadyNodeIds() const;
         std::vector<std::string> GetAllNodeIds() const;
@@ -92,11 +102,15 @@ namespace mpc_engine::coordinator
         std::vector<std::string> GetNodesByStatus(ConnectionStatus status) const;
         std::vector<std::string> GetNodesByShardIndex(uint32_t shard_index) const;
 
-        bool InitializeWalletServer(const std::string& wallet_url, const std::string& auth_token);
-        bool IsWalletServerInitialized() const;
+        // HTTPS Server 관리 (Wallet Server 통신)
+        bool InitializeHttpsServer();
+        bool StartHttpsServer();
+        void StopHttpsServer();
+        bool IsHttpsServerRunning() const;
 
     private:
         network::NodeTcpClient* FindNodeClientInternal(const std::string& node_id) const;
         void OnNodeStatusChanged(const std::string& node_id, ConnectionStatus status);
     };
+
 } // namespace mpc_engine::coordinator

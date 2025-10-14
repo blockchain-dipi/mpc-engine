@@ -20,7 +20,7 @@ namespace mpc_engine::utils
     };
 
     // 결과를 문자열로 변환
-    inline const char* ToString(QueueResult result) 
+    inline const char* QueueResultToString(QueueResult result) 
     {
         switch (result) {
             case QueueResult::SUCCESS: return "SUCCESS";

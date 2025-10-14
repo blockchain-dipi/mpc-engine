@@ -24,10 +24,9 @@ find_package(Threads REQUIRED)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# === Proto 라이브러리 (최우선 빌드) ===
+# === Proto 라이브러리 (Coordinator-Node) ===
 set(PROTO_GEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/proto/coordinator_node/generated)
 
-# Proto 생성 파일들 자동 수집
 file(GLOB PROTO_SRCS "${PROTO_GEN_DIR}/*.pb.cc")
 file(GLOB PROTO_HDRS "${PROTO_GEN_DIR}/*.pb.h")
 
@@ -40,10 +39,9 @@ target_link_libraries(proto_coordinator_node
     ${Protobuf_LIBRARIES}
 )
 
-# === Wallet-Coordinator Proto 라이브러리 ===
+# === Proto 라이브러리 (Wallet-Coordinator) ===
 set(WALLET_PROTO_GEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/proto/wallet_coordinator/generated)
 
-# Proto 생성 파일들 자동 수집
 file(GLOB WALLET_PROTO_SRCS "${WALLET_PROTO_GEN_DIR}/*.pb.cc")
 file(GLOB WALLET_PROTO_HDRS "${WALLET_PROTO_GEN_DIR}/*.pb.h")
 
@@ -62,9 +60,6 @@ add_library(mpc_common STATIC
     src/common/utils/firewall/KernelFirewall.cpp
     src/common/config/EnvConfig.cpp
     src/common/config/EnvManager.cpp
-    src/common/network/https/src/HttpWriter.cpp
-    src/common/network/https/src/HttpsClient.cpp
-    src/common/network/https/src/HttpsConnectionPool.cpp
     src/common/network/tls/src/TlsContext.cpp
     src/common/network/tls/src/TlsConnection.cpp
 )
@@ -87,7 +82,9 @@ add_library(mpc_resource STATIC
 )
 
 target_include_directories(mpc_resource PUBLIC src)
-target_link_libraries(mpc_resource mpc_common)
+target_link_libraries(mpc_resource
+    mpc_common
+)
 
 # === KMS 라이브러리 ===
 add_library(mpc_kms STATIC
@@ -100,18 +97,24 @@ add_library(mpc_kms STATIC
 )
 
 target_include_directories(mpc_kms PUBLIC src)
-target_link_libraries(mpc_kms mpc_common)
+target_link_libraries(mpc_kms
+    mpc_common
+)
 
-# === Coordinator-Node 프로토콜 (올바른 경로) ===
+# === Coordinator-Node 프로토콜 ===
 add_library(coordinator_node_protocol STATIC
     src/coordinator/handlers/node/src/SigningHandler.cpp
 )
 
 target_include_directories(coordinator_node_protocol PUBLIC src)
-target_link_libraries(coordinator_node_protocol mpc_common)
+target_link_libraries(coordinator_node_protocol
+    proto_coordinator_node
+    mpc_common
+)
 
 # === Coordinator Wallet 핸들러 ===
 add_library(coordinator_wallet_handlers STATIC
+    src/coordinator/handlers/wallet/src/WalletMessageRouter.cpp
     src/coordinator/handlers/wallet/src/WalletSigningHandler.cpp
 )
 
@@ -144,6 +147,8 @@ target_include_directories(node_network PUBLIC src)
 target_link_libraries(node_network 
     proto_coordinator_node
     mpc_common
+    mpc_kms
+    mpc_resource
     Threads::Threads
 )
 
@@ -158,25 +163,27 @@ target_link_libraries(coordinator_node_network
     proto_coordinator_node
     mpc_common
     mpc_kms
+    mpc_resource
     Threads::Threads
 )
 
-# === Coordinator Wallet 네트워크 ===
-add_library(coordinator_wallet_network STATIC
-src/coordinator/handlers/wallet/src/WalletMessageRouter.cpp
-    src/coordinator/network/wallet_server/src/WalletConnectionInfo.cpp    
-    src/coordinator/network/wallet_server/src/WalletServerManager.cpp
+# === Coordinator Wallet Server (HTTPS) ===
+add_library(coordinator_wallet_server STATIC
+    src/coordinator/network/wallet_server/src/HttpParser.cpp
+    src/coordinator/network/wallet_server/src/WalletConnection.cpp
+    src/coordinator/network/wallet_server/src/CoordinatorHttpsServer.cpp
 )
 
-target_include_directories(coordinator_wallet_network PUBLIC src)
-target_link_libraries(coordinator_wallet_network
-    mpc_common
-    proto_wallet_coordinator
+target_include_directories(coordinator_wallet_server PUBLIC src)
+target_link_libraries(coordinator_wallet_server
     coordinator_wallet_handlers
-    nlohmann_json::nlohmann_json
+    proto_wallet_coordinator
+    mpc_common
+    mpc_kms
+    mpc_resource
+    Threads::Threads
     OpenSSL::SSL
     OpenSSL::Crypto
-    Threads::Threads
 )
 
 # === Node 서버 라이브러리 ===
@@ -191,6 +198,7 @@ target_link_libraries(node_server
     proto_coordinator_node
     mpc_common
     mpc_kms
+    mpc_resource
     Threads::Threads
 )
 
@@ -202,11 +210,13 @@ add_library(coordinator_server STATIC
 target_include_directories(coordinator_server PUBLIC src)
 target_link_libraries(coordinator_server
     coordinator_node_network
-    coordinator_wallet_network
+    coordinator_wallet_server
+    coordinator_wallet_handlers
     proto_coordinator_node
     proto_wallet_coordinator
     mpc_common
     mpc_kms
+    mpc_resource
     Threads::Threads
 )
 
@@ -245,5 +255,6 @@ message(STATUS "=== MPC Engine Build Configuration ===")
 message(STATUS "Building: coordinator and node executables")
 message(STATUS "KMS: Local (functional)")
 message(STATUS "TLS: mTLS enabled")
+message(STATUS "Coordinator Wallet Server: HTTPS enabled")
 message(STATUS "Build tests: ${BUILD_TESTS}")
 message(STATUS "=======================================")

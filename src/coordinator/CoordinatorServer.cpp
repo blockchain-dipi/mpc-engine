@@ -7,6 +7,7 @@
 #include <fstream>
 #include <algorithm>
 #include <iostream>
+#include <future>
 
 namespace mpc_engine::coordinator
 {
@@ -48,86 +49,6 @@ namespace mpc_engine::coordinator
         return true;
     }
 
-    bool CoordinatorServer::InitializeWalletServer(
-        const std::string& wallet_url,
-        const std::string& auth_token
-    ) {
-        std::cout << "[CoordinatorServer] Initializing Wallet Server..." << std::endl;
-
-        // TLS Context 생성 (Wallet 통신용)
-        auto& kms = KMSManager::Instance();
-
-        TlsContext tls_ctx;
-        TlsConfig config = TlsConfig::CreateSecureServerConfig(); // 서버 모드
-
-        if (!tls_ctx.Initialize(config)) {
-            std::cerr << "[CoordinatorServer] Failed to initialize TLS context" << std::endl;
-            return false;
-        }
-
-        // CA 인증서 로드
-        std::string tls_cert_path = EnvManager::Instance().GetString("TLS_CERT_PATH");
-        std::string tls_ca = EnvManager::Instance().GetString("TLS_CERT_CA");
-
-        std::string ca_pem = ReadOnlyResLoaderManager::Instance().ReadFile(tls_cert_path + tls_ca);
-        if (ca_pem.empty()) {
-            std::cerr << "[CoordinatorServer] Failed to load CA certificate from KMS" << std::endl;
-            return false;
-        }
-        
-        if (!tls_ctx.LoadCA(ca_pem)) {
-            std::cerr << "[CoordinatorServer] Failed to load CA certificate" << std::endl;
-            return false;
-        }
-
-        // Coordinator-Wallet 서버 인증서 로드
-        std::string coordinator_wallet_cert_path = EnvManager::Instance().GetString("TLS_CERT_COORDINATOR_WALLET");
-        std::string coordinator_wallet_key_id = EnvManager::Instance().GetString("TLS_KMS_COORDINATOR_WALLET_KEY_ID");
-
-        std::string certificate_pem = ReadOnlyResLoaderManager::Instance().ReadFile(tls_cert_path + coordinator_wallet_cert_path);
-        std::string private_key_pem = kms.GetSecret(coordinator_wallet_key_id);
-
-        if (certificate_pem.empty() || private_key_pem.empty()) {
-            std::cerr << "[CoordinatorServer] Empty coordinator wallet certificate or key" << std::endl;
-            return false;
-        }
-
-        CertificateData cert_data;
-        cert_data.certificate_pem = certificate_pem;
-        cert_data.private_key_pem = private_key_pem;
-
-        if (!tls_ctx.LoadCertificate(cert_data)) {
-            std::cerr << "[CoordinatorServer] Failed to load coordinator wallet certificate" << std::endl;
-            return false;
-        }
-
-        if (!wallet_manager_.Initialize(wallet_url, auth_token, tls_ctx)) {
-            std::cerr << "[CoordinatorServer] Failed to initialize Wallet Server" << std::endl;
-            return false;
-        }
-
-        std::cout << "[CoordinatorServer] Wallet Server initialized successfully" << std::endl;
-        return true;
-    }
-
-    // std::unique_ptr<protocol::coordinator_wallet::WalletSigningResponse> 
-    // CoordinatorServer::SendToWallet(
-    //     const protocol::coordinator_wallet::WalletSigningRequest& request
-    // ) {
-    //     if (!wallet_manager_.IsInitialized()) {
-    //         std::cerr << "[CoordinatorServer] Wallet Server not initialized" << std::endl;
-    //         return nullptr;
-    //     }
-
-    //     std::cout << "[CoordinatorServer] Sending request to Wallet Server..." << std::endl;
-    //     return wallet_manager_.SendSigningRequest(request);
-    // }
-
-    bool CoordinatorServer::IsWalletServerInitialized() const 
-    {
-        return wallet_manager_.IsInitialized();
-    }
-
     bool CoordinatorServer::Start() 
     {
         if (!is_initialized.load() || is_running.load()) 
@@ -148,6 +69,11 @@ namespace mpc_engine::coordinator
         }
     
         is_running = false;
+        
+        // HTTPS 서버 중지
+        StopHttpsServer();
+        
+        // 모든 Node 연결 해제
         DisconnectAllNodes();
 
         std::cout << "Coordinator server stopped" << std::endl;
@@ -157,6 +83,10 @@ namespace mpc_engine::coordinator
     {
         return is_running.load();
     }
+
+    // ========================================
+    // Node 관리
+    // ========================================
 
     bool CoordinatorServer::RegisterNode(
         const std::string& node_id,
@@ -207,6 +137,7 @@ namespace mpc_engine::coordinator
         std::unique_ptr<network::NodeTcpClient> node_client = std::make_unique<network::NodeTcpClient>(
             node_id, address, port, platform, shard_index, certificate_path, private_key_id
         );
+        
         if (!node_client->Initialize()) {
             std::cerr << "[CoordinatorServer] Failed to initialize TLS context for node: " << node_id << std::endl;
             return false;
@@ -235,7 +166,7 @@ namespace mpc_engine::coordinator
     {
         std::lock_guard<std::mutex> lock(nodes_mutex);
         
-        std::unordered_map<std::string, std::unique_ptr<network::NodeTcpClient>>::const_iterator it = node_clients.find(node_id);
+        auto it = node_clients.find(node_id);
         if (it != node_clients.end()) 
         {
             it->second->Disconnect();
@@ -249,6 +180,10 @@ namespace mpc_engine::coordinator
         std::lock_guard<std::mutex> lock(nodes_mutex);
         return node_clients.find(node_id) != node_clients.end();
     }
+
+    // ========================================
+    // Node 연결
+    // ========================================
 
     bool CoordinatorServer::ConnectToNode(const std::string& node_id) 
     {
@@ -279,7 +214,7 @@ namespace mpc_engine::coordinator
     {
         std::lock_guard<std::mutex> lock(nodes_mutex);
 
-        for (const std::pair<const std::string, std::unique_ptr<network::NodeTcpClient>>& entry : node_clients)
+        for (auto& entry : node_clients)
         {
             if (entry.second) 
             {
@@ -288,7 +223,13 @@ namespace mpc_engine::coordinator
         }
     }
 
-    std::unique_ptr<CoordinatorNodeMessage> CoordinatorServer::SendToNode(const std::string& node_id, const CoordinatorNodeMessage* request) 
+    // ========================================
+    // Node 통신
+    // ========================================
+
+    std::unique_ptr<CoordinatorNodeMessage> CoordinatorServer::SendToNode(
+        const std::string& node_id, 
+        const CoordinatorNodeMessage* request) 
     {
         network::NodeTcpClient* client = FindNodeClientInternal(node_id);
         if (!client) 
@@ -300,7 +241,9 @@ namespace mpc_engine::coordinator
         return client->SendRequest(request);
     }
 
-    bool CoordinatorServer::BroadcastToNodes(const std::vector<std::string>& node_ids, const CoordinatorNodeMessage* request) 
+    bool CoordinatorServer::BroadcastToNodes(
+        const std::vector<std::string>& node_ids, 
+        const CoordinatorNodeMessage* request) 
     {
         if (node_ids.empty()) {
             return true;
@@ -311,7 +254,6 @@ namespace mpc_engine::coordinator
         
         for (const std::string& node_id : node_ids) 
         {
-            // SendToNode()를 비동기로 실행
             auto future = std::async(std::launch::async, [this, node_id, request]() {
                 return SendToNode(node_id, request);
             });
@@ -327,14 +269,15 @@ namespace mpc_engine::coordinator
             const std::string& node_id = pair.first;
             
             try {
-                // 타임아웃 35초 (SendRequest의 30초 + 여유 5초)
+                // 타임아웃 35초
                 if (pair.second.wait_for(std::chrono::seconds(35)) == std::future_status::timeout) {
                     std::cerr << "Broadcast timeout for node: " << node_id << std::endl;
                     all_success = false;
                     continue;
                 }
                 
-                std::unique_ptr<CoordinatorNodeMessage> response = pair.second.get();                
+                std::unique_ptr<CoordinatorNodeMessage> response = pair.second.get();
+                
                 if (!response) {
                     std::cerr << "Broadcast failed for node: " << node_id << " - null response" << std::endl;
                     all_success = false;
@@ -366,12 +309,16 @@ namespace mpc_engine::coordinator
         return BroadcastToNodes(connected_nodes, request);
     }
 
+    // ========================================
+    // Node 상태 조회
+    // ========================================
+
     std::vector<std::string> CoordinatorServer::GetConnectedNodeIds() const 
     {
         std::lock_guard<std::mutex> lock(nodes_mutex);
         std::vector<std::string> result;
 
-        for (const std::pair<const std::string, std::unique_ptr<network::NodeTcpClient>>& entry : node_clients) 
+        for (const auto& entry : node_clients) 
         {
             if (entry.second && entry.second->IsConnected()) 
             {
@@ -384,7 +331,7 @@ namespace mpc_engine::coordinator
 
     std::vector<std::string> CoordinatorServer::GetReadyNodeIds() const 
     {
-        return GetConnectedNodeIds(); // 일단 연결된 노드 = 준비된 노드
+        return GetConnectedNodeIds();
     }
 
     std::vector<std::string> CoordinatorServer::GetAllNodeIds() const 
@@ -392,7 +339,7 @@ namespace mpc_engine::coordinator
         std::lock_guard<std::mutex> lock(nodes_mutex);
         std::vector<std::string> result;
 
-        for (const std::pair<const std::string, std::unique_ptr<network::NodeTcpClient>>& entry : node_clients)
+        for (const auto& entry : node_clients)
         {
             result.push_back(entry.first);
         }
@@ -451,7 +398,7 @@ namespace mpc_engine::coordinator
         stats.uptime_seconds = (utils::GetCurrentTimeMs() - start_time) / 1000;
         stats.last_update_time = utils::GetCurrentTimeMs();
         
-        for (const std::pair<const std::string, std::unique_ptr<network::NodeTcpClient>>& entry : node_clients)
+        for (const auto& entry : node_clients)
         {
             if (entry.second && entry.second->IsConnected()) 
             {
@@ -468,7 +415,7 @@ namespace mpc_engine::coordinator
         std::lock_guard<std::mutex> lock(nodes_mutex);
         std::vector<std::string> result;
 
-        for (const std::pair<const std::string, std::unique_ptr<network::NodeTcpClient>>& entry : node_clients)
+        for (const auto& entry : node_clients)
         {
             if (entry.second && entry.second->GetPlatform() == platform) 
             {
@@ -479,11 +426,12 @@ namespace mpc_engine::coordinator
         return result;
     }
 
-    std::vector<std::string> CoordinatorServer::GetNodesByStatus(ConnectionStatus status) const {
+    std::vector<std::string> CoordinatorServer::GetNodesByStatus(ConnectionStatus status) const 
+    {
         std::lock_guard<std::mutex> lock(nodes_mutex);
         std::vector<std::string> result;
 
-        for (const std::pair<const std::string, std::unique_ptr<network::NodeTcpClient>>& entry : node_clients)
+        for (const auto& entry : node_clients)
         {
             if (entry.second && entry.second->GetStatus() == status) 
             {
@@ -499,7 +447,7 @@ namespace mpc_engine::coordinator
         std::lock_guard<std::mutex> lock(nodes_mutex);
         std::vector<std::string> result;
 
-        for (const std::pair<const std::string, std::unique_ptr<network::NodeTcpClient>>& entry : node_clients)
+        for (const auto& entry : node_clients)
         {
             if (entry.second && entry.second->GetShardIndex() == shard_index) 
             {
@@ -510,11 +458,102 @@ namespace mpc_engine::coordinator
         return result;
     }
 
+    // ========================================
+    // HTTPS Server 관리
+    // ========================================
+
+    bool CoordinatorServer::InitializeHttpsServer() 
+    {
+        using namespace network::wallet_server;
+
+        std::cout << "[CoordinatorServer] Initializing HTTPS server..." << std::endl;
+
+        try {
+            // 환경변수에서 설정 로드
+            auto& env = EnvManager::Instance();
+
+            HttpsServerConfig config;
+            config.bind_address = env.GetString("COORDINATOR_HTTPS_BIND");
+            config.bind_port = env.GetUInt16("COORDINATOR_HTTPS_PORT");
+            config.max_connections = env.GetUInt32("COORDINATOR_HTTPS_MAX_CONNECTIONS");
+            config.handler_threads = env.GetUInt32("COORDINATOR_HTTPS_HANDLER_THREADS");
+            config.idle_timeout_ms = env.GetUInt32("COORDINATOR_HTTPS_IDLE_TIMEOUT_MS");
+            
+            // TLS 설정 (TLS_CERT_PATH 기준 상대 경로)
+            config.tls_cert_path = env.GetString("TLS_CERT_COORDINATOR_WALLET");
+            config.tls_key_id = env.GetString("TLS_KMS_COORDINATOR_WALLET_KEY_ID");
+
+            if (config.tls_cert_path.empty() || config.tls_key_id.empty()) {
+                std::cerr << "[CoordinatorServer] Missing TLS configuration" << std::endl;
+                std::cerr << "  TLS_CERT_COORDINATOR_WALLET: " << config.tls_cert_path << std::endl;
+                std::cerr << "  TLS_KMS_COORDINATOR_WALLET_KEY_ID: " << config.tls_key_id << std::endl;
+                return false;
+            }
+
+            // HTTPS 서버 생성 및 초기화
+            https_server = std::make_unique<CoordinatorHttpsServer>(config);
+            
+            if (!https_server->Initialize()) {
+                std::cerr << "[CoordinatorServer] Failed to initialize HTTPS server" << std::endl;
+                return false;
+            }
+
+            std::cout << "[CoordinatorServer] HTTPS server initialized successfully" << std::endl;
+            std::cout << "  Bind: " << config.bind_address << ":" << config.bind_port << std::endl;
+            std::cout << "  Max Connections: " << config.max_connections << std::endl;
+            std::cout << "  Handler Threads: " << config.handler_threads << std::endl;
+            std::cout << "  Idle Timeout: " << config.idle_timeout_ms << "ms" << std::endl;
+
+            return true;
+
+        } catch (const std::exception& e) {
+            std::cerr << "[CoordinatorServer] Failed to initialize HTTPS server: " 
+                      << e.what() << std::endl;
+            return false;
+        }
+    }
+
+    bool CoordinatorServer::StartHttpsServer() 
+    {
+        if (!https_server) {
+            std::cerr << "[CoordinatorServer] HTTPS server not initialized" << std::endl;
+            return false;
+        }
+
+        std::cout << "[CoordinatorServer] Starting HTTPS server..." << std::endl;
+
+        if (!https_server->Start()) {
+            std::cerr << "[CoordinatorServer] Failed to start HTTPS server" << std::endl;
+            return false;
+        }
+
+        std::cout << "[CoordinatorServer] HTTPS server started successfully" << std::endl;
+        return true;
+    }
+
+    void CoordinatorServer::StopHttpsServer() 
+    {
+        if (https_server) {
+            std::cout << "[CoordinatorServer] Stopping HTTPS server..." << std::endl;
+            https_server->Stop();
+            std::cout << "[CoordinatorServer] HTTPS server stopped" << std::endl;
+        }
+    }
+
+    bool CoordinatorServer::IsHttpsServerRunning() const 
+    {
+        return https_server && https_server->IsRunning();
+    }
+
+    // ========================================
+    // Private 메서드
+    // ========================================
+
     network::NodeTcpClient* CoordinatorServer::FindNodeClientInternal(const std::string& node_id) const 
     {
         std::lock_guard<std::mutex> lock(nodes_mutex);
         
-        std::unordered_map<std::string, std::unique_ptr<network::NodeTcpClient>>::const_iterator it = node_clients.find(node_id);
+        auto it = node_clients.find(node_id);
         return (it != node_clients.end()) ? it->second.get() : nullptr;
     }
 
@@ -522,4 +561,5 @@ namespace mpc_engine::coordinator
     {
         std::cout << "Node " << node_id << " status changed to: " << static_cast<int>(status) << std::endl;
     }
-}
+
+} // namespace mpc_engine::coordinator

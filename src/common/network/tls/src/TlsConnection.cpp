@@ -540,7 +540,7 @@ namespace mpc_engine::network::tls
         void PrintConnectionInfo(const TlsConnection& conn) 
         {
             std::cout << "=== TLS Connection Info ===" << std::endl;
-            std::cout << "State: " << ToString(conn.GetState()) << std::endl;
+            std::cout << "State: " << TlsConnectionStateToString(conn.GetState()) << std::endl;
             std::cout << "Protocol: " << conn.GetProtocolVersion() << std::endl;
             std::cout << "Cipher: " << conn.GetCipherInfo() << std::endl;
             std::cout << "Handshake duration: " << conn.GetHandshakeDuration() << "ms" << std::endl;

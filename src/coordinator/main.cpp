@@ -90,6 +90,9 @@ int main(int argc, char* argv[])
     }
     
     try {
+        // ========================================
+        // 필수 설정 검증
+        // ========================================
         std::vector<std::string> required_keys = {
             "COORDINATOR_PLATFORM",
             "NODE_HOSTS",
@@ -98,9 +101,12 @@ int main(int argc, char* argv[])
             "NODE_SHARD_INDICES",
             "MPC_THRESHOLD",
             "MPC_TOTAL_SHARDS",
-            "WALLET_SERVER_URL",
-            "WALLET_SERVER_AUTH_TOKEN"
-        };        
+            // HTTPS Server 관련 설정
+            "COORDINATOR_HTTPS_PORT",
+            "TLS_CERT_COORDINATOR_WALLET",
+            "TLS_KMS_COORDINATOR_WALLET_KEY_ID"
+        };
+        
         std::cout << "Validating required configuration..." << std::endl;
         Config::ValidateRequired(required_keys);
         std::cout << "✓ All required configurations present" << std::endl;
@@ -114,7 +120,7 @@ int main(int argc, char* argv[])
     try {
         std::string platform_type = Config::GetString("COORDINATOR_PLATFORM");
         PlatformType platform = PlatformTypeFromString(platform_type);
-        std::cout << "\n=== KMS Initialization ===" << std::endl;
+        std::cout << "\n=== Initialization ===" << std::endl;
         std::cout << "Coordinator Platform: " << platform_type << std::endl;
 
         if (platform == PlatformType::UNKNOWN) {
@@ -123,22 +129,25 @@ int main(int argc, char* argv[])
         }
 
         // ========================================
-        // 0. 리소스 로더 초기화
+        // 1. 리소스 로더 초기화
         // ========================================
+        std::cout << "\n=== Resource Loader Initialization ===" << std::endl;
         ReadOnlyResLoaderManager::Instance().Initialize(platform);
+        std::cout << "✓ Resource loader initialized" << std::endl;
 
         // ========================================
-        // 1. KMS 초기화
+        // 2. KMS 초기화
         // ========================================
+        std::cout << "\n=== KMS Initialization ===" << std::endl;
         std::string kms_config_path;
         if (platform == PlatformType::LOCAL) {
             kms_config_path = Config::GetString("COORDINATOR_LOCAL_KMS_PATH");
         }
-        KMSManager::InitializeLocal(PlatformType::UNKNOWN, kms_config_path);
+        KMSManager::InitializeLocal(platform, kms_config_path);
         std::cout << "✓ KMS initialized successfully" << std::endl;
         
         // ========================================
-        // 2. Coordinator Server 초기화
+        // 3. Coordinator Server 초기화
         // ========================================
         std::cout << "\n=== Coordinator Server Initialization ===" << std::endl;
         
@@ -161,22 +170,24 @@ int main(int argc, char* argv[])
         std::cout << "✓ Coordinator server started" << std::endl;
         
         // ========================================
-        // 3. Wallet Server 초기화
+        // 4. HTTPS Server 초기화 및 시작
         // ========================================
-        std::cout << "\n=== Wallet Server Initialization ===" << std::endl;
-
-        std::string wallet_url = Config::GetString("WALLET_SERVER_URL");
-        std::string wallet_auth_token = Config::GetString("WALLET_SERVER_AUTH_TOKEN");
-
-        if (!coordinator.InitializeWalletServer(wallet_url, wallet_auth_token)) {
-            std::cerr << "✗ Failed to initialize Wallet Server" << std::endl;
-            std::cerr << "  Note: This is expected if Wallet Server is not running yet" << std::endl;
-        } else {
-            std::cout << "✓ Wallet Server initialized" << std::endl;
+        std::cout << "\n=== HTTPS Server Initialization ===" << std::endl;
+        
+        if (!coordinator.InitializeHttpsServer()) {
+            std::cerr << "✗ Failed to initialize HTTPS server" << std::endl;
+            return 1;
         }
         
+        if (!coordinator.StartHttpsServer()) {
+            std::cerr << "✗ Failed to start HTTPS server" << std::endl;
+            return 1;
+        }
+        
+        std::cout << "✓ HTTPS server started" << std::endl;
+        
         // ========================================
-        // 4. Node 설정 로드 및 등록
+        // 5. Node 설정 로드 및 등록
         // ========================================
         std::cout << "\n=== Node Configuration ===" << std::endl;
         
@@ -207,9 +218,9 @@ int main(int argc, char* argv[])
                       << endpoint.first << ":" << endpoint.second 
                       << " [shard " << shard_index << "]" << std::endl;
 
-            PlatformType platform_type = PlatformTypeFromString(node_platform);
+            PlatformType node_platform_type = PlatformTypeFromString(node_platform);
 
-            if (!coordinator.RegisterNode(node_id, platform_type, endpoint.first, endpoint.second, shard_index)) {
+            if (!coordinator.RegisterNode(node_id, node_platform_type, endpoint.first, endpoint.second, shard_index)) {
                 std::cerr << "Failed to register node: " << node_id << std::endl;
                 return 1;
             }
@@ -217,7 +228,7 @@ int main(int argc, char* argv[])
         std::cout << "✓ All nodes registered" << std::endl;
         
         // ========================================
-        // 5. Node 연결
+        // 6. Node 연결
         // ========================================
         std::cout << "\n=== Node Connection ===" << std::endl;
         std::cout << "Attempting to connect to registered nodes..." << std::endl;
@@ -241,8 +252,11 @@ int main(int argc, char* argv[])
         }
         
         // ========================================
-        // 6. 시작 정보 출력
+        // 7. 시작 정보 출력
         // ========================================
+        std::string https_bind = Config::GetString("COORDINATOR_HTTPS_BIND");
+        uint16_t https_port = Config::GetUInt16("COORDINATOR_HTTPS_PORT");
+        
         std::cout << "\n========================================" << std::endl;
         std::cout << "  Coordinator Server Running" << std::endl;
         std::cout << "========================================" << std::endl;
@@ -251,12 +265,13 @@ int main(int argc, char* argv[])
         std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
         std::cout << "  Registered Nodes: " << node_ids.size() << std::endl;
         std::cout << "  Connected Nodes: " << connected_count << std::endl;
-        std::cout << "  Wallet Server: " << (coordinator.IsWalletServerInitialized() ? "✓ Ready" : "✗ Not ready") << std::endl;
+        std::cout << "  HTTPS Server: " << (coordinator.IsHttpsServerRunning() ? "✓ Running" : "✗ Stopped") << std::endl;
+        std::cout << "  HTTPS Endpoint: " << https_bind << ":" << https_port << std::endl;
         std::cout << "========================================" << std::endl;
         std::cout << "\nPress Ctrl+C to shutdown gracefully..." << std::endl;
         
         // ========================================
-        // 7. 메인 루프
+        // 8. 메인 루프
         // ========================================
         {
             std::unique_lock<std::mutex> lock(g_shutdown_mutex);
