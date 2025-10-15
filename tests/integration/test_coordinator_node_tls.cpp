@@ -6,6 +6,7 @@
 #include "common/kms/include/KMSManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
+#include "types/MessageTypes.hpp"
 #include "proto/coordinator_node/generated/message.pb.h"
 #include "proto/coordinator_node/generated/signing.pb.h"
 #include "proto/coordinator_node/generated/common.pb.h"

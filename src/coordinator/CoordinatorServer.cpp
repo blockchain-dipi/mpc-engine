@@ -1,11 +1,7 @@
 // src/coordinator/CoordinatorServer.cpp
 #include "coordinator/CoordinatorServer.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
-#include "common/kms/include/KMSManager.hpp"
 #include "common/env/EnvManager.hpp"
-#include "common/resource/include/ReadOnlyResLoaderManager.hpp"
-#include <fstream>
-#include <algorithm>
 #include <iostream>
 #include <future>
 
@@ -13,8 +9,6 @@ namespace mpc_engine::coordinator
 {
     using namespace mpc_engine::network::tls;
     using namespace mpc_engine::env;
-    using namespace mpc_engine::kms;
-    using namespace mpc_engine::resource;
 
     std::unique_ptr<CoordinatorServer> CoordinatorServer::instance = nullptr;
     std::mutex CoordinatorServer::instance_mutex;

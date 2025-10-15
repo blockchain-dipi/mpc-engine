@@ -1,180 +1,461 @@
-# MPC Engine
+<!-- README.md -->
+# MPC Wallet System Architecture
 
-Multi-Party Computation 기반 분산 지갑 서명 시스템
+## 시스템 개요
 
----
-
-## 개요
-
-MPC Engine은 2/3 threshold 서명을 통해 안전한 암호화폐 지갑을 구현하는 시스템입니다.
-
-**핵심 기능:**
-- 분산 키 관리 (MPC-based)
-- Coordinator-Node 아키텍처
-- 멀티 클라우드 지원 (AWS, Azure, IBM, Google)
-- HTTPS 기반 Wallet 서버 통신
+2/3 Threshold MPC 기반 분산 지갑 서명 시스템
 
 ---
 
-## 아키텍처┌─────────────────┐
-│  Wallet Server  │ (Go, 확장 가능)
-└────────┬────────┘
-│ HTTPS
-▼
+## 전체 아키텍처
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     User Layer                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                    HTTPS (TLS 1.3, mTLS)
+                              │
+┌─────────────────────────────▼─────────────────────────────┐
+│                  Wallet Server Layer                       │
+│                  (Go, Auto-Scaling)                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │ Wallet 1 │  │ Wallet 2 │  │ Wallet 3 │  │ Wallet N │  │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │
+│       │             │             │             │          │
+└───────┼─────────────┼─────────────┼─────────────┼──────────┘
+        │             │             │             │
+        └─────────────┴─────────────┴─────────────┘
+                      │
+            HTTPS (Proto, Keep-Alive)
+                      │
+┌─────────────────────▼─────────────────────────────────────┐
+│              MPC Engine Server Set (N개)                   │
+│         (각 Set = Coordinator + Node Group)                │
+├───────────────────────────────────────────────────────────┤
+│                                                            │
+│  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃            MPC Engine Set 1                        ┃  │
+│  ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫  │
+│  ┃  ┌─────────────────────────────────────────┐       ┃  │
+│  ┃  │      Coordinator Server (C++)           │       ┃  │
+│  ┃  │  - HTTPS Listener (boost.beast)         │       ┃  │
+│  ┃  │  - WalletMessageRouter                  │       ┃  │
+│  ┃  │  - ThreadPool (16 workers)              │       ┃  │
+│  ┃  │  - NodeTcpClient Manager                │       ┃  │
+│  ┃  └──────┬────────────┬────────────┬─────────┘       ┃  │
+│  ┃         │            │            │                 ┃  │
+│  ┃    TCP/TLS      TCP/TLS      TCP/TLS               ┃  │
+│  ┃   (mTLS)       (mTLS)       (mTLS)                 ┃  │
+│  ┃         │            │            │                 ┃  │
+│  ┃  ┌──────▼──────┐ ┌──▼──────┐ ┌──▼──────┐          ┃  │
+│  ┃  │   Node 1    │ │ Node 2  │ │ Node 3  │          ┃  │
+│  ┃  │   (C++)     │ │ (C++)   │ │ (C++)   │          ┃  │
+│  ┃  │             │ │         │ │         │          ┃  │
+│  ┃  │ AWS Nitro   │ │ Azure   │ │  IBM    │          ┃  │
+│  ┃  │  Enclave    │ │  CC     │ │  SE     │          ┃  │
+│  ┃  │             │ │         │ │         │          ┃  │
+│  ┃  │  Shard 0    │ │ Shard 1 │ │ Shard 2 │          ┃  │
+│  ┃  └─────────────┘ └─────────┘ └─────────┘          ┃  │
+│  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛  │
+│                                                            │
+│  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃            MPC Engine Set 2                        ┃  │
+│  ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫  │
+│  ┃  [Coordinator + 3 Nodes]                           ┃  │
+│  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛  │
+│                                                            │
+│  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃            MPC Engine Set N                        ┃  │
+│  ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫  │
+│  ┃  [Coordinator + 3 Nodes]                           ┃  │
+│  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛  │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 계층 구조
+
+### Layer 1: Wallet Server (Go)
+- **역할**: 사용자 요청 수신 및 라우팅
+- **언어**: Go
+- **특징**:
+  - Auto-Scaling (수평 확장)
+  - Stateless
+  - Load Balancer 뒤에 배치
+- **통신**:
+  - ↑ User: HTTPS (TLS 1.3, mTLS)
+  - ↓ Coordinator: HTTPS (Proto, Keep-Alive)
+
+### Layer 2: MPC Engine Server Set
+각 Set은 **독립적인 MPC 서명 시스템**
+
+#### 2-1. Coordinator Server (C++)
+- **역할**: MPC 서명 오케스트레이션
+- **언어**: C++ (boost.beast)
+- **인스턴스**: Set당 1개 (고정)
+- **주요 컴포넌트**:
+  ```
+  ┌─────────────────────────────────┐
+  │    CoordinatorHttpsServer       │
+  │  - HTTPS Listener (9080)        │
+  │  - TLS 1.3, mTLS                │
+  │  - boost.beast async I/O        │
+  │  - Keep-Alive support           │
+  └──────────────┬──────────────────┘
+                 │
+  ┌──────────────▼──────────────────┐
+  │    WalletMessageRouter          │
+  │  - SIGNING_REQUEST routing      │
+  │  - Handler registration         │
+  └──────────────┬──────────────────┘
+                 │
+  ┌──────────────▼──────────────────┐
+  │    ThreadPool (16 workers)      │
+  │  - Request processing           │
+  │  - Proto serialization          │
+  └──────────────┬──────────────────┘
+                 │
+  ┌──────────────▼──────────────────┐
+  │    NodeTcpClient Manager        │
+  │  - 3개 Node 연결 관리           │
+  │  - TCP/TLS mTLS                 │
+  │  - Broadcast & Collect          │
+  └─────────────────────────────────┘
+  ```
+
+#### 2-2. Node Server (C++)
+- **역할**: 개별 Shard 서명
+- **언어**: C++ (MPC-lib)
+- **인스턴스**: Set당 3개 (고정)
+- **보안 환경**:
+  - Node 1: AWS Nitro Enclaves
+  - Node 2: Azure Confidential Computing
+  - Node 3: IBM Secure Execution
+- **격리 수준**: 
+  - 커널 레벨 격리
+  - 1 Coordinator만 통신 허용
+  - 화이트리스트 IP 필터링
+
+---
+
+## 통신 프로토콜
+
+### 1. Wallet ↔ Coordinator (HTTPS)
+
+**프로토콜**: HTTPS (TLS 1.3)  
+**포트**: 9080  
+**인증**: mTLS (상호 인증)  
+**메시지**: Protocol Buffers  
+**Keep-Alive**: 지원 (최대 100 req/conn)
+
+```protobuf
+// WalletCoordinatorMessage
+message WalletSigningRequest {
+    WalletRequestHeader header = 1;
+    string key_id = 2;
+    string transaction_data = 3;
+    uint32 threshold = 4;
+    uint32 total_shards = 5;
+}
+
+message WalletSigningResponse {
+    WalletResponseHeader header = 1;
+    string key_id = 2;
+    string final_signature = 3;
+    repeated ShardSignature shard_signatures = 4;
+}
+```
+
+### 2. Coordinator ↔ Node (TCP/TLS)
+
+**프로토콜**: TCP over TLS 1.3  
+**포트**: 8081, 8082, 8083  
+**인증**: mTLS (상호 인증)  
+**메시지**: Protocol Buffers  
+**연결**: 지속 연결 (persistent)
+
+```protobuf
+// CoordinatorNodeMessage
+message SigningRequest {
+    RequestHeader header = 1;
+    string key_id = 2;
+    string transaction_data = 3;
+    uint32 threshold = 4;
+    uint32 total_shards = 5;
+}
+
+message SigningResponse {
+    ResponseHeader header = 1;
+    string signature_share = 2;
+    uint32 shard_index = 3;
+}
+```
+
+---
+
+## 데이터 흐름
+
+### 서명 요청 플로우
+
+```
+User
+  │
+  │ 1. POST /api/v1/sign
+  │    (JWT Token)
+  ▼
+┌─────────────┐
+│ Wallet      │ 2. Validate & Route
+│ Server (Go) │    (Load Balance)
+└──────┬──────┘
+       │ 3. WalletSigningRequest (Proto)
+       │    HTTPS Keep-Alive
+       ▼
+┌──────────────────┐
+│  Coordinator     │ 4. Parse Proto
+│  (C++)           │    → WalletMessageRouter
+└──────┬───────────┘    → ThreadPool
+       │
+       │ 5. Broadcast SigningRequest
+       ├───────────────────────┬───────────────────┐
+       │                       │                   │
+       ▼                       ▼                   ▼
+┌─────────────┐      ┌─────────────┐     ┌─────────────┐
+│  Node 1     │      │  Node 2     │     │  Node 3     │
+│  (AWS)      │      │  (Azure)    │     │  (IBM)      │
+│             │      │             │     │             │
+│  Shard 0    │      │  Shard 1    │     │  Shard 2    │
+└──────┬──────┘      └──────┬──────┘     └──────┬──────┘
+       │                    │                    │
+       │ 6. Partial Sign    │                    │
+       │    (MPC-lib)       │                    │
+       │                    │                    │
+       └────────────────────┴────────────────────┘
+                            │
+       7. Collect Signatures (2/3 Threshold)
+                            │
+                            ▼
+                   ┌──────────────────┐
+                   │  Coordinator     │
+                   │  Combine Sigs    │
+                   └────────┬─────────┘
+                            │
+       8. WalletSigningResponse (Proto)
+                            │
+                            ▼
+                   ┌─────────────┐
+                   │ Wallet      │
+                   │ Server (Go) │
+                   └──────┬──────┘
+                          │
+       9. JSON Response   │
+          (final_signature)
+                          ▼
+                        User
+```
+
+---
+
+## 확장성 (Scalability)
+
+### 수평 확장 (Horizontal Scaling)
+
+#### Wallet Server Layer
+```
+Load Balancer
+      │
+      ├─── Wallet Server 1
+      ├─── Wallet Server 2
+      ├─── Wallet Server 3
+      └─── Wallet Server N (Auto-Scaling)
+```
+- **방식**: Auto-Scaling Group
+- **기준**: CPU, Request Rate
+- **최소**: 2개
+- **최대**: 무제한
+
+#### MPC Engine Server Set
+```
 ┌─────────────────┐
-│  Coordinator    │ (C++)
-└────────┬────────┘
-│ TCP (보안)
-┌────┼────┬────┐
-▼    ▼    ▼    ▼
-┌───┐┌───┐┌───┐┌───┐
-│N1 ││N2 ││N3 ││...│ (각 클라우드)
-└───┘└───┘└───┘└───┘
+│  Set 1 (100 TPS)│ ← Default
+└─────────────────┘
 
-**구성 요소:**
-1. **Wallet Server** - 사용자 요청 처리 (Go)
-2. **Coordinator** - 서명 오케스트레이션 (C++)
-3. **Node** - 개별 샤드 서명 (C++, 독립 보안 환경)
+┌─────────────────┐
+│  Set 2 (100 TPS)│ ← Scale out
+└─────────────────┘
 
----
-
-## 빌드
-
-### 의존성 설치
-
-**Ubuntu/Debian:**
-```bashsudo apt-get update
-sudo apt-get install -y 
-build-essential 
-cmake 
-libssl-dev
-
-**macOS:**
-```bashbrew install cmake openssl
-
-### 빌드 실행
-```bashmkdir build
-cd build
-cmake ..
-make -j$(nproc)
-
-**결과:**build/
-├── coordinator  # Coordinator 서버
-└── node        # Node 서버
+┌─────────────────┐
+│  Set N (100 TPS)│ ← Scale out
+└─────────────────┘
+```
+- **방식**: Manual Scaling (현재)
+- **기준**: TPS 목표
+- **Set당 처리량**: ~100 TPS
+- **Set 추가**: 신규 Coordinator + 3 Nodes 배포
 
 ---
 
-## 실행
+## 보안 구조
 
-### 1. Node 서버 실행 (3개 필요)
-```bashTerminal 1
-./build/node --env local --id node_1Terminal 2
-./build/node --env local --id node_2Terminal 3
-./build/node --env local --id node_3
+### 1. 네트워크 보안
 
-### 2. Coordinator 서버 실행
-```bashTerminal 4
-./build/coordinator local
+#### Wallet ↔ Coordinator
+```
+┌─────────────┐           ┌──────────────┐
+│   Wallet    │ ◄────────► │ Coordinator  │
+│             │   TLS 1.3  │              │
+│ Client Cert │   mTLS     │ Server Cert  │
+└─────────────┘  Verified  └──────────────┘
+     ↑                             ↑
+     │                             │
+  CA Cert                       CA Cert
+```
 
-**확인:**========================================
-Coordinator Server Running
-Platform: LOCAL
-Connected Nodes: 3/3
-MPC Threshold: 2/3
+#### Coordinator ↔ Node
+```
+┌──────────────┐          ┌─────────────┐
+│ Coordinator  │ ◄──────► │    Node     │
+│              │  TLS 1.3 │             │
+│ Client Cert  │  mTLS    │ Server Cert │
+└──────────────┘ Verified └─────────────┘
+                               │
+                         IP Whitelist
+                      (Coordinator IP만)
+```
 
----
+### 2. 데이터 보안
 
-## 환경 설정
+#### At Rest (저장 시)
+- **Shard**: 클라우드 KMS 암호화
+- **Certificate**: KMS에 개인키 저장
+- **Transaction**: 암호화 없음 (일회성)
 
-### Local 개발 환경
+#### In Transit (전송 시)
+- **모든 통신**: TLS 1.3 암호화
+- **Protocol**: Protocol Buffers (Binary)
 
-`env/.env.local`:
-```bashCoordinator
-COORDINATOR_PLATFORM=LOCAL
-COORDINATOR_LOCAL_KMS_PATH=.kmsNodes
-NODE_IDS=node_1,node_2,node_3
-NODE_HOSTS=127.0.0.1:8081,127.0.0.1:8082,127.0.0.1:8083
-NODE_PLATFORMS=LOCAL,LOCAL,LOCALMPC
-MPC_THRESHOLD=2
-MPC_TOTAL_SHARDS=3Wallet Server
-WALLET_SERVER_URL=https://localhost:3000
-WALLET_SERVER_AUTH_TOKEN=Bearer wallet_dev_token_12345
+### 3. Node 격리 보안
 
-### 멀티 클라우드 환경 (예시)
-```bashNODE_PLATFORMS=AWS,AZURE,IBM
-NODE_AWS_REGION=us-east-1
-NODE_AZURE_REGION=eastus
-NODE_IBM_REGION=us-south
-
----
-
-## 보안
-
-### Node 보안
-
-1. **커널 방화벽**: Coordinator만 연결 허용
-```bashENABLE_KERNEL_FIREWALL=true
-TRUSTED_COORDINATOR_IP=10.0.0.100
-
-2. **KMS 통합**: 클라우드별 키 관리 서비스
-   - Local: 파일 기반 암호화
-   - AWS: AWS KMS
-   - Azure: Azure Key Vault
-   - IBM: IBM Secrets Manager
-
-3. **독립 실행 환경**:
-   - AWS Nitro Enclaves
-   - Azure Confidential Computing
-   - IBM Secure Execution
-
-### 통신 보안
-
-- **Coordinator ↔ Node**: TLS over TCP
-- **Coordinator ↔ Wallet**: HTTPS (TLS 1.2+)
+```
+┌─────────────────────────────────────┐
+│         Host OS (Untrusted)         │
+├─────────────────────────────────────┤
+│                                     │
+│  ┌───────────────────────────────┐ │
+│  │   AWS Nitro Enclave (Node 1)  │ │
+│  │   - Isolated CPU/Memory       │ │
+│  │   - No network (vsock only)   │ │
+│  │   - Attestation required      │ │
+│  │   - Coordinator IP whitelist  │ │
+│  └───────────────────────────────┘ │
+│                                     │
+└─────────────────────────────────────┘
+```
 
 ---
 
-## 테스트
-```bash단위 테스트
-cd build
-cmake .. -DBUILD_TESTS=ON
-make
-ctest통합 테스트
-./build/test_coordinator_node_basic
+## 성능 지표
+
+### Coordinator HTTPS Server
+- **처리량**: 14,496 req/sec (High Load)
+- **지연시간**: 
+  - 평균: 2-5ms
+  - 최대: 186ms (Stress Test)
+- **동시 연결**: 100+ clients
+- **에러율**: 0%
+
+### MPC Engine Set
+- **예상 TPS**: ~100 TPS/Set
+- **서명 지연**: ~100ms (MPC 연산)
+- **Threshold**: 2/3 (최소 2개 Node 필요)
 
 ---
 
-## 디렉토리 구조mpc-engine/
-├── src/
-│   ├── common/          # 공통 유틸리티
-│   │   ├── config/      # 환경 설정
-│   │   ├── kms/         # KMS 추상화
-│   │   ├── utils/       # 소켓, 스레딩 등
-│   │   └── https/       # HTTPS 라이브러리
-│   ├── coordinator/     # Coordinator 서버
-│   │   ├── network/     # Node/Wallet 통신
-│   │   └── handlers/    # 요청 처리
-│   ├── node/           # Node 서버
-│   │   ├── network/    # TCP 서버
-│   │   └── handlers/   # 서명 처리
-│   └── protocols/      # 프로토콜 정의
-│       ├── coordinator_node/   # 이진 프로토콜
-│       └── coordinator_wallet/ # JSON 프로토콜
-├── env/                # 환경 설정 파일
-├── certs/             # TLS 인증서
-├── tests/             # 테스트
-└── docs/              # 문서
+## 배포 구조
 
-## 로드맵
+### 개발 환경 (Local)
+```
+1개 Machine
+  ├─ Coordinator (127.0.0.1:9080)
+  ├─ Node 1 (127.0.0.1:8081)
+  ├─ Node 2 (127.0.0.1:8082)
+  └─ Node 3 (127.0.0.1:8083)
+```
 
-- [x] Phase 1-7: TCP 통신, 멀티스레드, 보안
-- [x] Phase 8: KMS 통합
-- [ ] Phase 9: HTTPS 구현 (진행 중)
-- [ ] Phase 10: TLS/mTLS 적용
-- [ ] Phase 11: 프로덕션 배포
+### 프로덕션 환경
+```
+Region: us-east-1
+
+┌─────────────────────────────────────┐
+│         VPC (10.0.0.0/16)           │
+├─────────────────────────────────────┤
+│                                     │
+│  Public Subnet (10.0.1.0/24)       │
+│  ┌──────────────────────────────┐  │
+│  │   Load Balancer (ALB)        │  │
+│  └────────────┬─────────────────┘  │
+│               │                     │
+│  Private Subnet (10.0.2.0/24)      │
+│  ┌────────────▼─────────────────┐  │
+│  │  Wallet Servers (ASG)        │  │
+│  │   - instance 1               │  │
+│  │   - instance 2               │  │
+│  │   - instance N               │  │
+│  └────────────┬─────────────────┘  │
+│               │                     │
+│  Private Subnet (10.0.3.0/24)      │
+│  ┌────────────▼─────────────────┐  │
+│  │  Coordinator 1 (EC2)         │  │
+│  └────────────┬─────────────────┘  │
+│               │                     │
+│  Isolated Subnets                  │
+│  ┌────────────▼─────────────────┐  │
+│  │  Node 1 (AWS Nitro Enclave)  │  │
+│  └──────────────────────────────┘  │
+│  ┌──────────────────────────────┐  │
+│  │  Node 2 (Azure CC)           │  │ (VPN/Direct Connect)
+│  └──────────────────────────────┘  │
+│  ┌──────────────────────────────┐  │
+│  │  Node 3 (IBM SE)             │  │ (VPN/Direct Connect)
+│  └──────────────────────────────┘  │
+│                                     │
+└─────────────────────────────────────┘
+```
 
 ---
 
-## 라이선스
+## 향후 확장 계획
 
-Proprietary - Volche
+### Phase 1: 기본 MPC (현재)
+- ✅ 1 Set (Coordinator + 3 Nodes)
+- ✅ 2/3 Threshold
+- ✅ Mock 서명
+
+### Phase 2: 실제 MPC 통합
+- [ ] fireblocks/mpc-lib 통합
+- [ ] 실제 키 생성/서명
+- [ ] Threshold 검증
+
+### Phase 3: Multi-Set 확장
+- [ ] N개 Set 동시 운영
+- [ ] Wallet Server 로드밸런싱
+- [ ] Set 간 Failover
+
+### Phase 4: Dynamic Sharding
+- [ ] 사용자별 Shard 추가/제거
+- [ ] 3개 → N개 Shard 확장
+- [ ] Threshold 조정 (2/3 → M/N)
+
+### Phase 5: Google Cloud 추가
+- [ ] Node 4: Google Confidential VM
+- [ ] 4개 클라우드 분산
+- [ ] 3/4 Threshold
+
+---
+
+## 참고 문서
+
+- [AWS Nitro Enclaves - MPC Wallet](https://aws.amazon.com/ko/blogs/web3/build-secure-multi-party-computation-mpc-wallets-using-aws-nitro-enclaves/)
+- [fireblocks/mpc-lib](https://github.com/fireblocks/mpc-lib)
+- [boost.beast Documentation](https://www.boost.org/doc/libs/1_82_0/libs/beast/doc/html/index.html)

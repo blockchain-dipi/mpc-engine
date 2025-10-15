@@ -3,7 +3,6 @@
 #include "coordinator/network/node_client/include/NodeTcpClient.hpp"
 #include "coordinator/network/wallet_server/include/CoordinatorHttpsServer.hpp"
 #include "proto/coordinator_node/generated/message.pb.h"
-#include "types/MessageTypes.hpp"
 #include <memory>
 #include <string>
 #include <unordered_map>

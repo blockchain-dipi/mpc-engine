@@ -6,6 +6,7 @@
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
+#include "types/MessageTypes.hpp"
 #include "proto/wallet_coordinator/generated/wallet_message.pb.h"
 #include "proto/coordinator_node/generated/message.pb.h"
 #include "types/BasicTypes.hpp"
