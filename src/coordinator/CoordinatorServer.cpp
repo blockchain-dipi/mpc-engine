@@ -2,7 +2,7 @@
 #include "coordinator/CoordinatorServer.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/env/EnvManager.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 #include <future>
 
 namespace mpc_engine::coordinator
@@ -51,7 +51,7 @@ namespace mpc_engine::coordinator
         }
 
         is_running = true;
-        std::cout << "Coordinator server started" << std::endl;
+        LOG_INFO("CoordinatorServer", "Coordinator server started");
         return true;
     }
 
@@ -59,6 +59,7 @@ namespace mpc_engine::coordinator
     {
         if (!is_running.load()) 
         {
+            LOG_WARN("CoordinatorServer", "Coordinator server is not running");
             return;
         }
     
@@ -70,7 +71,7 @@ namespace mpc_engine::coordinator
         // 모든 Node 연결 해제
         DisconnectAllNodes();
 
-        std::cout << "Coordinator server stopped" << std::endl;
+        LOG_INFO("CoordinatorServer", "Coordinator server stopped");
     }
 
     bool CoordinatorServer::IsRunning() const 
@@ -91,7 +92,7 @@ namespace mpc_engine::coordinator
     {
         if (node_id.empty() || address.empty() || port == 0) 
         {
-            std::cerr << "Invalid node parameters" << std::endl;
+            LOG_ERROR("CoordinatorServer", "Invalid node parameters");
             return false;
         }
 
@@ -99,7 +100,7 @@ namespace mpc_engine::coordinator
         
         if (node_clients.find(node_id) != node_clients.end()) 
         {
-            std::cerr << "Node already registered: " << node_id << std::endl;
+            LOG_ERRORF("CoordinatorServer", "Node already registered: %s", node_id.c_str());
             return false;
         }
 
@@ -124,7 +125,7 @@ namespace mpc_engine::coordinator
         }
 
         if (!found) {
-            std::cerr << "Certificate configuration not found for node: " << node_id << std::endl;
+            LOG_ERRORF("CoordinatorServer", "Certificate configuration not found for node: %s", node_id.c_str());
             return false;
         }
 
@@ -133,7 +134,7 @@ namespace mpc_engine::coordinator
         );
         
         if (!node_client->Initialize()) {
-            std::cerr << "[CoordinatorServer] Failed to initialize TLS context for node: " << node_id << std::endl;
+            LOG_ERRORF("CoordinatorServer", "Failed to initialize TLS context for node: %s", node_id.c_str());
             return false;
         }
         
@@ -148,11 +149,10 @@ namespace mpc_engine::coordinator
         });
         
         node_clients[node_id] = std::move(node_client);
-        
-        std::cout << "Node registered: " << node_id << " at " << address << ":" << port 
-                  << " (platform: " << PlatformTypeToString(platform) 
-                  << ", shard: " << shard_index << ")" << std::endl;
-        
+
+        LOG_INFOF("CoordinatorServer", "Node registered: %s at %s:%d (platform: %s, shard: %d)",
+                  node_id.c_str(), address.c_str(), port, PlatformTypeToString(platform).c_str(), shard_index);
+
         return true;
     }
 
@@ -165,7 +165,7 @@ namespace mpc_engine::coordinator
         {
             it->second->Disconnect();
             node_clients.erase(it);
-            std::cout << "Node unregistered: " << node_id << std::endl;
+            LOG_INFOF("CoordinatorServer", "Node unregistered: %s", node_id.c_str());
         }
     }
 
@@ -183,7 +183,7 @@ namespace mpc_engine::coordinator
     {
         network::NodeTcpClient* client = FindNodeClientInternal(node_id);
         if (!client) {
-            std::cerr << "Node not found: " << node_id << std::endl;
+            LOG_ERRORF("CoordinatorServer", "Node not found: %s", node_id.c_str());
             return false;
         }
 
@@ -228,7 +228,7 @@ namespace mpc_engine::coordinator
         network::NodeTcpClient* client = FindNodeClientInternal(node_id);
         if (!client) 
         {
-            std::cerr << "Node not found: " << node_id << std::endl;
+            LOG_ERRORF("CoordinatorServer", "Node not found: %s", node_id.c_str());
             return nullptr;
         }
 
@@ -240,6 +240,7 @@ namespace mpc_engine::coordinator
         const CoordinatorNodeMessage* request) 
     {
         if (node_ids.empty()) {
+            LOG_WARN("CoordinatorServer", "No node IDs provided for broadcast");
             return true;
         }
     
@@ -265,7 +266,7 @@ namespace mpc_engine::coordinator
             try {
                 // 타임아웃 35초
                 if (pair.second.wait_for(std::chrono::seconds(35)) == std::future_status::timeout) {
-                    std::cerr << "Broadcast timeout for node: " << node_id << std::endl;
+                    LOG_ERRORF("CoordinatorServer", "Broadcast timeout for node: %s", node_id.c_str());
                     all_success = false;
                     continue;
                 }
@@ -273,7 +274,7 @@ namespace mpc_engine::coordinator
                 std::unique_ptr<CoordinatorNodeMessage> response = pair.second.get();
                 
                 if (!response) {
-                    std::cerr << "Broadcast failed for node: " << node_id << " - null response" << std::endl;
+                    LOG_ERRORF("CoordinatorServer", "Broadcast failed for node: %s - null response", node_id.c_str());
                     all_success = false;
                     continue;
                 }
@@ -281,15 +282,14 @@ namespace mpc_engine::coordinator
                 if (response->has_signing_response()) {
                     const SigningResponse& signing_resp = response->signing_response();
                     if (!signing_resp.header().success()) {
-                        std::cerr << "Broadcast failed for node: " << node_id 
-                            << " - error: " << signing_resp.header().error_message() << std::endl;
+                        LOG_ERRORF("CoordinatorServer", "Broadcast failed for node: %s - error: %s", 
+                            node_id.c_str(), signing_resp.header().error_message().c_str());
                         all_success = false;
                     }
                 }
                 
             } catch (const std::exception& e) {
-                std::cerr << "Broadcast exception for node: " << node_id 
-                          << ", error: " << e.what() << std::endl;
+                LOG_ERRORF("CoordinatorServer", "Broadcast exception for node: %s, error: %s", node_id.c_str(), e.what());
                 all_success = false;
             }
         }
@@ -460,7 +460,7 @@ namespace mpc_engine::coordinator
     {
         using namespace network::wallet_server;
 
-        std::cout << "[CoordinatorServer] Initializing HTTPS server..." << std::endl;
+        LOG_INFO("CoordinatorServer", "Initializing HTTPS server...");
 
         try {
             // 환경변수에서 설정 로드
@@ -477,9 +477,9 @@ namespace mpc_engine::coordinator
             config.tls_key_id = env.GetString("TLS_KMS_COORDINATOR_WALLET_KEY_ID");
 
             if (config.tls_cert_path.empty() || config.tls_key_id.empty()) {
-                std::cerr << "[CoordinatorServer] Missing TLS configuration" << std::endl;
-                std::cerr << "  TLS_CERT_COORDINATOR_WALLET: " << config.tls_cert_path << std::endl;
-                std::cerr << "  TLS_KMS_COORDINATOR_WALLET_KEY_ID: " << config.tls_key_id << std::endl;
+                LOG_ERROR("CoordinatorServer", "Missing TLS configuration");
+                LOG_ERRORF("CoordinatorServer", "  TLS_CERT_COORDINATOR_WALLET: %s", config.tls_cert_path.c_str());
+                LOG_ERRORF("CoordinatorServer", "  TLS_KMS_COORDINATOR_WALLET_KEY_ID: %s", config.tls_key_id.c_str());
                 return false;
             }
 
@@ -487,20 +487,19 @@ namespace mpc_engine::coordinator
             https_server = std::make_unique<CoordinatorHttpsServer>(config);
             
             if (!https_server->Initialize()) {
-                std::cerr << "[CoordinatorServer] Failed to initialize HTTPS server" << std::endl;
+                LOG_ERROR("CoordinatorServer", "Failed to initialize HTTPS server");
                 return false;
             }
 
-            std::cout << "[CoordinatorServer] HTTPS server initialized successfully" << std::endl;
-            std::cout << "  Bind: " << config.bind_address << ":" << config.bind_port << std::endl;
-            std::cout << "  Max Connections: " << config.max_connections << std::endl;
-            std::cout << "  Handler Threads: " << config.handler_threads << std::endl;
+            LOG_INFO("CoordinatorServer", "HTTPS server initialized successfully");
+            LOG_INFOF("CoordinatorServer", "  Bind: %s:%d", config.bind_address.c_str(), config.bind_port);
+            LOG_INFOF("CoordinatorServer", "  Max Connections: %d", config.max_connections);
+            LOG_INFOF("CoordinatorServer", "  Handler Threads: %d", config.handler_threads);
 
             return true;
 
         } catch (const std::exception& e) {
-            std::cerr << "[CoordinatorServer] Failed to initialize HTTPS server: " 
-                      << e.what() << std::endl;
+            LOG_ERRORF("CoordinatorServer", "Failed to initialize HTTPS server: %s", e.what());
             return false;
         }
     }
@@ -508,27 +507,27 @@ namespace mpc_engine::coordinator
     bool CoordinatorServer::StartHttpsServer() 
     {
         if (!https_server) {
-            std::cerr << "[CoordinatorServer] HTTPS server not initialized" << std::endl;
+            LOG_ERROR("CoordinatorServer", "HTTPS server not initialized");
             return false;
         }
 
-        std::cout << "[CoordinatorServer] Starting HTTPS server..." << std::endl;
+        LOG_INFO("CoordinatorServer", "Starting HTTPS server...");
 
         if (!https_server->Start()) {
-            std::cerr << "[CoordinatorServer] Failed to start HTTPS server" << std::endl;
+            LOG_ERROR("CoordinatorServer", "Failed to start HTTPS server");
             return false;
         }
 
-        std::cout << "[CoordinatorServer] HTTPS server started successfully" << std::endl;
+        LOG_INFO("CoordinatorServer", "HTTPS server started successfully");
         return true;
     }
 
     void CoordinatorServer::StopHttpsServer() 
     {
         if (https_server) {
-            std::cout << "[CoordinatorServer] Stopping HTTPS server..." << std::endl;
+            LOG_INFO("CoordinatorServer", "Stopping HTTPS server...");
             https_server->Stop();
-            std::cout << "[CoordinatorServer] HTTPS server stopped" << std::endl;
+            LOG_INFO("CoordinatorServer", "HTTPS server stopped");
         }
     }
 
@@ -551,7 +550,7 @@ namespace mpc_engine::coordinator
 
     void CoordinatorServer::OnNodeStatusChanged(const std::string& node_id, ConnectionStatus status) 
     {
-        std::cout << "Node " << node_id << " status changed to: " << static_cast<int>(status) << std::endl;
+        LOG_INFOF("CoordinatorServer", "Node %s status changed to: %d", node_id.c_str(), static_cast<int>(status));
     }
 
 } // namespace mpc_engine::coordinator

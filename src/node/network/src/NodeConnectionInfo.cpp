@@ -1,6 +1,7 @@
 // src/node/network/src/NodeConnectionInfo.cpp
 #include "node/network/include/NodeConnectionInfo.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
+#include "common/utils/logger/Logger.hpp"
 #include <stdexcept>
 
 namespace mpc_engine::node::network
@@ -33,6 +34,7 @@ namespace mpc_engine::node::network
     TlsConnection& NodeConnectionInfo::GetTlsConnection() const
     {
         if (!tls_connection) {
+            LOG_ERROR("NodeConnectionInfo", "TLS connection is null");
             throw std::runtime_error("TLS connection is null");
         }
         return *tls_connection;

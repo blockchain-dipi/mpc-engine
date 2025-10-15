@@ -1,16 +1,16 @@
 // src/coordinator/handlers/wallet/src/WalletSigningHandler.cpp
 #include "coordinator/handlers/wallet/include/WalletSigningHandler.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 
 namespace mpc_engine::coordinator::handlers::wallet
 {
     std::unique_ptr<WalletCoordinatorMessage> HandleWalletSigningRequest(const WalletCoordinatorMessage* request) 
     {
-        std::cout << "=== HandleWalletSigningRequest ===" << std::endl;
+        LOG_DEBUG("WalletSigningHandler", "=== HandleWalletSigningRequest ===");
 
         if (!request || !request->has_signing_request()) {
-            std::cerr << "[Handler] Invalid request" << std::endl;
+            LOG_ERROR("WalletSigningHandler", "[Handler] Invalid request");
             return nullptr;
         }
 
@@ -24,10 +24,10 @@ namespace mpc_engine::coordinator::handlers::wallet
 
         try 
         {
-            std::cout << "[Handler] Processing signing request:" << std::endl;
-            std::cout << "  Key ID: " << signing_req.key_id() << std::endl;
-            std::cout << "  Transaction: " << signing_req.transaction_data().substr(0, 50) << "..." << std::endl;
-            std::cout << "  Threshold: " << signing_req.threshold() << "/" << signing_req.total_shards() << std::endl;
+            LOG_DEBUG("WalletSigningHandler", "[Handler] Processing signing request:");
+            LOG_DEBUGF("WalletSigningHandler", "  Key ID: %s", signing_req.key_id().c_str());
+            LOG_DEBUGF("WalletSigningHandler", "  Transaction: %s", signing_req.transaction_data().substr(0, 50).c_str());
+            LOG_DEBUGF("WalletSigningHandler", "  Threshold: %d/%d", signing_req.threshold(), signing_req.total_shards());
 
             // === Mock MPC 서명 시뮬레이션 ===
             
@@ -50,15 +50,15 @@ namespace mpc_engine::coordinator::handlers::wallet
             std::string final_sig = "0xMOCK_FINAL_SIG_" + signing_req.key_id() + "_" + std::to_string(utils::GetCurrentTimeMs());
             response->set_final_signature(final_sig);
             response->set_successful_shards(signing_req.total_shards());
-            
-            std::cout << "[Handler] Mock signing completed successfully" << std::endl;
-            std::cout << "  Final Signature: " << response->final_signature() << std::endl;
+
+            LOG_DEBUG("WalletSigningHandler", "[Handler] Mock signing completed successfully");
+            LOG_DEBUGF("WalletSigningHandler", "  Final Signature: %s", response->final_signature().c_str());
         }
         catch (const std::exception& e) 
         {
             header->set_success(false);
             header->set_error_message("Wallet signing failed: " + std::string(e.what()));
-            std::cerr << "[Handler] Error: " << header->error_message() << std::endl;
+            LOG_ERRORF("WalletSigningHandler", "Error: %s", header->error_message().c_str());
         }
         
         return response_msg;

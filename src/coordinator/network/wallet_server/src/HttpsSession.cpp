@@ -1,7 +1,7 @@
 // src/coordinator/network/wallet_server/src/HttpsSession.cpp
 #include "coordinator/network/wallet_server/include/HttpsSession.hpp"
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 
 namespace mpc_engine::coordinator::network::wallet_server
 {
@@ -36,17 +36,18 @@ namespace mpc_engine::coordinator::network::wallet_server
             return;
         }
 
-        std::cout << "[HttpsSession] Starting..." << std::endl;
+        LOG_INFO("HttpsSession", "Starting...");
         DoTlsHandshake();
     }
 
     void HttpsSession::Stop() 
     {
         if (!active_.exchange(false)) {
+            LOG_WARN("HttpsSession", "Already stopped");
             return;
         }
 
-        std::cout << "[HttpsSession] Stopping..." << std::endl;
+        LOG_INFO("HttpsSession", "Stopping...");
 
         beast::error_code ec;
 
@@ -60,7 +61,7 @@ namespace mpc_engine::coordinator::network::wallet_server
         // NOLINTNEXTLINE(bugprone-unused-return-value)
         socket.close(ec);
         if (ec) {
-            std::cerr << "[HttpsSession] Close error: " << ec.message() << std::endl;
+            LOG_ERRORF("HttpsSession", "Close error: %s", ec.message().c_str());
         }
     }
 
@@ -74,11 +75,10 @@ namespace mpc_engine::coordinator::network::wallet_server
             ssl::stream_base::server,
             [self](beast::error_code ec) {
                 if (!ec) {
-                    std::cout << "[HttpsSession] TLS handshake success" << std::endl;
+                    LOG_INFO("HttpsSession", "TLS handshake success");
                     self->DoRead();
                 } else {
-                    std::cerr << "[HttpsSession] TLS handshake failed: " 
-                              << ec.message() << std::endl;
+                    LOG_ERRORF("HttpsSession", "TLS handshake failed: %s", ec.message().c_str());
                 }
             }
         );
@@ -87,6 +87,7 @@ namespace mpc_engine::coordinator::network::wallet_server
     void HttpsSession::DoRead() 
     {
         if (!active_.load()) {
+            LOG_WARN("HttpsSession", "Already stopped");
             return;
         }
 
@@ -112,71 +113,91 @@ namespace mpc_engine::coordinator::network::wallet_server
         (void)bytes_transferred;
 
         if (ec == http::error::end_of_stream) {
-            std::cout << "[HttpsSession] Client closed connection" << std::endl;
+            LOG_WARN("HttpsSession", "Client closed connection");
             DoClose();
             return;
         }
 
         if (ec == beast::error::timeout) {
-            std::cout << "[HttpsSession] Idle timeout" << std::endl;
+            LOG_WARN("HttpsSession", "Idle timeout");
             DoClose();
             return;
         }
 
         if (ec) {
-            std::cerr << "[HttpsSession] Read error: " << ec.message() << std::endl;
+            LOG_ERRORF("HttpsSession", "Read error: %s", ec.message().c_str());
             DoClose();
             return;
         }
 
         UpdateActivity();
 
-        std::cout << "[HttpsSession] Received request: " 
-                  << request_.method_string() << " " 
-                  << request_.target() << std::endl;
+        LOG_DEBUGF("HttpsSession", "Received request: %s %s", 
+                   request_.method_string().data(), 
+                   request_.target().data());
 
         // Proto 역직렬화
         auto wallet_message = std::make_unique<WalletCoordinatorMessage>();
         if (!wallet_message->ParseFromString(request_.body())) {
-            std::cerr << "[HttpsSession] Proto parse failed" << std::endl;
-            
-            // TODO: 400 Bad Request 응답
-            // 지금은 그냥 다음 요청 읽기
+            LOG_ERROR("HttpsSession", "Proto parse failed");
+
+            // 에러도 정상 응답 큐에 추가 (Keep-Alive 유지)
+            auto promise = std::make_shared<std::promise<HttpResponse>>();
+            auto future = promise->get_future();
+
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex_);
+                pending_queue_.push(std::move(future));
+            }
+
+            // 즉시 에러 응답 설정
+            HttpResponse error_response;
+            error_response.status_code = 400;
+            error_response.status_text = "Bad Request";
+            // 빈 proto 메시지 또는 에러 정보
+            error_response.protobuf_message = std::make_unique<WalletCoordinatorMessage>();
+
+            promise->set_value(std::move(error_response));
+
+            requests_handled_++;
+
+            // 다음 요청 읽기 계속
             DoRead();
+
+            // Write Loop 시작
+            bool expected = false;
+            if (write_in_progress_.compare_exchange_strong(expected, true)) {
+                DoWrite();
+            }
+
             return;
         }
 
-        // promise/future 생성
+        // 정상 처리 (기존 코드)
         auto promise = std::make_shared<std::promise<HttpResponse>>();
         auto future = promise->get_future();
 
-        // Context 생성
         auto context = std::make_unique<WalletHandlerContext>(
             std::move(wallet_message),
             promise
         );
 
-        // pending_queue에 future 추가 (순서 기록!)
         {
             std::lock_guard<std::mutex> lock(queue_mutex_);
             pending_queue_.push(std::move(future));
         }
 
-        // ThreadPool에 제출
         try {
             thread_pool_.SubmitOwned(ProcessRequest, std::move(context));
         } catch (const std::exception& e) {
-            std::cerr << "[HttpsSession] Failed to submit task: " << e.what() << std::endl;
+            LOG_ERRORF("HttpsSession", "Failed to submit task: %s", e.what());
             DoClose();
             return;
         }
 
         requests_handled_++;
-
-        // 즉시 다음 요청 읽기 (비동기!)
         DoRead();
 
-        // Write Loop 시작 (첫 요청이면)
         bool expected = false;
         if (write_in_progress_.compare_exchange_strong(expected, true)) {
             DoWrite();
@@ -191,6 +212,7 @@ namespace mpc_engine::coordinator::network::wallet_server
             std::lock_guard<std::mutex> lock(queue_mutex_);
             if (pending_queue_.empty()) {
                 write_in_progress_ = false;
+                LOG_WARN("HttpsSession", "No pending requests");
                 return;
             }
 
@@ -203,7 +225,7 @@ namespace mpc_engine::coordinator::network::wallet_server
         try {
             http_response = future.get();  // blocking
         } catch (const std::exception& e) {
-            std::cerr << "[HttpsSession] Future exception: " << e.what() << std::endl;
+            LOG_ERRORF("HttpsSession", "Future exception: %s", e.what());
             DoClose();
             return;
         }
@@ -212,7 +234,7 @@ namespace mpc_engine::coordinator::network::wallet_server
         std::string proto_body;
         if (http_response.protobuf_message && 
             !http_response.protobuf_message->SerializeToString(&proto_body)) {
-            std::cerr << "[HttpsSession] Proto serialize failed" << std::endl;
+            LOG_ERROR("HttpsSession", "Proto serialize failed");
             DoClose();
             return;
         }
@@ -229,9 +251,8 @@ namespace mpc_engine::coordinator::network::wallet_server
         response->keep_alive(keep_alive);
         response->prepare_payload();
 
-        std::cout << "[HttpsSession] Sending response: " 
-                  << http_response.status_code 
-                  << " (Keep-Alive: " << (keep_alive ? "yes" : "no") << ")" << std::endl;
+        LOG_DEBUGF("HttpsSession", "Sending response: %d (Keep-Alive: %s)", 
+            http_response.status_code, keep_alive ? "yes" : "no");
 
         auto self = shared_from_this();
 
@@ -249,7 +270,7 @@ namespace mpc_engine::coordinator::network::wallet_server
         (void)bytes_transferred;
 
         if (ec) {
-            std::cerr << "[HttpsSession] Write error: " << ec.message() << std::endl;
+            LOG_ERRORF("HttpsSession", "Write error: %s", ec.message().c_str());
             DoClose();
             return;
         }
@@ -257,7 +278,7 @@ namespace mpc_engine::coordinator::network::wallet_server
         UpdateActivity();
 
         if (!keep_alive) {
-            std::cout << "[HttpsSession] Keep-Alive expired, closing connection" << std::endl;
+            LOG_WARN("HttpsSession", "Keep-Alive expired, closing connection");
             DoClose();
             return;
         }
@@ -272,7 +293,7 @@ namespace mpc_engine::coordinator::network::wallet_server
             return;
         }
     
-        std::cout << "[HttpsSession] Closing connection" << std::endl;
+        LOG_INFO("HttpsSession", "Closing connection");
     
         auto self = shared_from_this();
     
@@ -285,7 +306,7 @@ namespace mpc_engine::coordinator::network::wallet_server
                 if (ec && ec != boost::asio::error::eof) {
                     // SSL short read는 정상적인 종료일 수 있음
                     if (ec != boost::asio::ssl::error::stream_truncated) {
-                        std::cerr << "[HttpsSession] SSL shutdown error: " << ec.message() << std::endl;
+                        LOG_ERRORF("HttpsSession", "SSL shutdown error: %s", ec.message().c_str());
                     }
                 }
                 
@@ -297,7 +318,7 @@ namespace mpc_engine::coordinator::network::wallet_server
                     socket.close(close_ec);
                     // close 에러는 로그만 (이미 닫혔을 수 있음)
                     if (close_ec) {
-                        std::cerr << "[HttpsSession] Socket close error: " << close_ec.message() << std::endl;
+                        LOG_ERRORF("HttpsSession", "Socket close error: %s", close_ec.message().c_str());
                     }
                 }
             }
@@ -328,7 +349,7 @@ namespace mpc_engine::coordinator::network::wallet_server
     void HttpsSession::ProcessRequest(WalletHandlerContext* context) 
     {
         if (!context || !context->request || !context->promise) {
-            std::cerr << "[ProcessRequest] Invalid context" << std::endl;
+            LOG_ERROR("HttpsSession", "Invalid context");
             return;
         }
 
@@ -349,7 +370,7 @@ namespace mpc_engine::coordinator::network::wallet_server
                 response.status_text = "Internal Server Error";
             }
         } catch (const std::exception& e) {
-            std::cerr << "[ProcessRequest] Exception: " << e.what() << std::endl;
+            LOG_ERRORF("HttpsSession", "Exception: %s", e.what());
             response.status_code = 500;
             response.status_text = "Internal Server Error";
         }
@@ -358,8 +379,7 @@ namespace mpc_engine::coordinator::network::wallet_server
         try {
             context->promise->set_value(std::move(response));
         } catch (const std::exception& e) {
-            std::cerr << "[ProcessRequest] Promise set_value failed: " 
-                      << e.what() << std::endl;
+            LOG_ERRORF("HttpsSession", "Promise set_value failed: %s", e.what());
         }
     }
 

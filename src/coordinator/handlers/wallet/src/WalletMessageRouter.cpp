@@ -1,7 +1,7 @@
 // src/coordinator/handlers/wallet/src/WalletMessageRouter.cpp
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include "coordinator/handlers/wallet/include/WalletSigningHandler.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 
 namespace mpc_engine::coordinator::handlers::wallet
 {
@@ -11,7 +11,7 @@ namespace mpc_engine::coordinator::handlers::wallet
             return true;
         }
 
-        std::cout << "[WalletMessageRouter] Initializing..." << std::endl;
+        LOG_INFO("WalletMessageRouter", "Initializing...");
 
         // Handler 등록
         handlers_[static_cast<size_t>(mpc_engine::WalletMessageType::SIGNING_REQUEST)] = HandleWalletSigningRequest;
@@ -20,20 +20,23 @@ namespace mpc_engine::coordinator::handlers::wallet
         // handlers_[static_cast<size_t>(WalletMessageType::STATUS_CHECK)] = ...
 
         initialized = true;
-        std::cout << "[WalletMessageRouter] Initialized successfully" << std::endl;
+        LOG_INFO("WalletMessageRouter", "Initialized successfully");
         
         return true;
     }
 
     std::unique_ptr<WalletCoordinatorMessage> WalletMessageRouter::ProcessMessage(const WalletCoordinatorMessage* request) 
     {
+        LOG_DEBUGF("WalletMessageRouter", "Processing message type: %s", 
+            WalletMessageTypeToString(static_cast<mpc_engine::WalletMessageType>(request->message_type())));
+
         if (!initialized) {
-            std::cerr << "[WalletMessageRouter] Not initialized" << std::endl;
+            LOG_ERROR("WalletMessageRouter", "Not initialized");
             return nullptr;
         }
 
         if (!request) {
-            std::cerr << "[WalletMessageRouter] Invalid request pointer" << std::endl;
+            LOG_ERROR("WalletMessageRouter", "Invalid request pointer");
             return nullptr;
         }
 
@@ -45,19 +48,17 @@ namespace mpc_engine::coordinator::handlers::wallet
 
         // 범위 체크
         if (index >= static_cast<size_t>(mpc_engine::WalletMessageType::MAX_MESSAGE_TYPE)) {
-            std::cerr << "[WalletMessageRouter] Invalid message type: " << message_type << std::endl;
+            LOG_ERRORF("WalletMessageRouter", "Invalid message type: %d", message_type);
             return nullptr;
         }
 
         // 핸들러 존재 체크
         if (!handlers_[index]) {
-            std::cerr << "[WalletMessageRouter] No handler for message type: " 
-                      << WalletMessageTypeToString(type) << std::endl;
+            LOG_ERRORF("WalletMessageRouter", "No handler for message type: %s", WalletMessageTypeToString(type));
             return nullptr;
         }
 
-        std::cout << "[WalletMessageRouter] Processing message type: " 
-                  << WalletMessageTypeToString(type) << std::endl;
+        LOG_DEBUGF("WalletMessageRouter", "Processing message type: %s", WalletMessageTypeToString(type));
 
         return handlers_[index](request);
     }

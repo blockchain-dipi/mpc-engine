@@ -1,7 +1,7 @@
 // src/coordinator/handlers/node/src/MessageRouter.cpp
 #include "coordinator/handlers/node/include/MessageRouter.hpp"
 #include "coordinator/handlers/node/include/SigningHandler.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 
 namespace mpc_engine::coordinator::handlers::node
 {
@@ -22,20 +22,20 @@ namespace mpc_engine::coordinator::handlers::node
     {
         if (!initialized) 
         {
-            std::cerr << "MessageRouter not initialized" << std::endl;
+            LOG_ERROR("MessageRouter", "MessageRouter not initialized");
             return nullptr;
         }
 
         int32_t index = request->message_type();
         if (index >= static_cast<int32_t>(mpc_engine::MessageType::MAX_MESSAGE_TYPE)) 
         {
-            std::cerr << "Invalid message type: " << index << std::endl;
+            LOG_ERRORF("MessageRouter", "Invalid message type: %d", index);
             return nullptr;
         }
 
         if (!handlers_[index]) 
         {
-            std::cerr << "No handler for message type: " << index << std::endl;
+            LOG_ERRORF("MessageRouter", "No handler for message type: %d", index);
             return nullptr;
         }
 

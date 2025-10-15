@@ -6,10 +6,10 @@
 #include "common/utils/threading/ThreadUtils.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
+#include "common/utils/logger/Logger.hpp"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <iostream>
 
 namespace mpc_engine::node::network
 {
@@ -23,6 +23,7 @@ namespace mpc_engine::node::network
     : bind_address(address), bind_port(port), num_handler_threads(handler_threads)
     {
         if (handler_threads == 0) {
+            LOG_ERROR("NodeTcpServer", "handler_threads must be at least 1");
             throw std::invalid_argument("handler_threads must be at least 1");
         }
     }
@@ -38,6 +39,7 @@ namespace mpc_engine::node::network
 
         TlsConfig config = TlsConfig::CreateSecureServerConfig();        
         if (!tls_context->Initialize(config)) {
+            LOG_WARN("NodeTcpServer", "Failed to initialize TLS context");
             return false;
         }
 
@@ -49,12 +51,12 @@ namespace mpc_engine::node::network
 
             std::string ca_pem = ReadOnlyResLoaderManager::Instance().ReadFile(tls_cert_path + tls_ca);
             if (ca_pem.empty()) {
-                std::cerr << "[NodeTcpServer] Failed to load CA certificate from KMS" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Failed to load CA certificate from KMS");
                 return false;
             }
 
             if (!tls_context->LoadCA(ca_pem)) {
-                std::cerr << "[NodeTcpServer] Failed to load CA certificate to context" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Failed to load CA certificate to context");
                 return false;
             }
 
@@ -63,6 +65,7 @@ namespace mpc_engine::node::network
             std::string private_key_pem = kms.GetSecret(private_key_id);
 
             if (certificate_pem.empty() || private_key_pem.empty()) {
+                LOG_ERROR("NodeTcpServer", "Failed to load certificate or private key");
                 return false;
             }
 
@@ -80,19 +83,20 @@ namespace mpc_engine::node::network
     bool NodeTcpServer::Initialize(const std::string& certificate_path, const std::string& private_key_id)
     {
         if (is_initialized.load()) {
+            LOG_WARN("NodeTcpServer", "NodeTcpServer is already initialized");
             return true;
         }
 
-        std::cout << "Initializing NodeTcpServer..." << std::endl;
+        LOG_INFO("NodeTcpServer", "Initializing NodeTcpServer...");
         if (!InitializeTlsContext(certificate_path, private_key_id)) {
-            std::cerr << "Failed to initialize TLS" << std::endl;
+            LOG_ERROR("NodeTcpServer", "Failed to initialize TLS");
             return false;
         }
 
         // Create server socket
         server_socket = socket(AF_INET, SOCK_STREAM, 0);
         if (server_socket == INVALID_SOCKET_VALUE) {
-            std::cerr << "Failed to create server socket" << std::endl;
+            LOG_ERROR("NodeTcpServer", "Failed to create server socket");
             return false;
         }
 
@@ -103,13 +107,13 @@ namespace mpc_engine::node::network
         server_addr.sin_port = htons(bind_port);
         
         if (inet_pton(AF_INET, bind_address.c_str(), &server_addr.sin_addr) <= 0) {
-            std::cerr << "Invalid bind address: " << bind_address << std::endl;
+            LOG_ERRORF("NodeTcpServer", "Invalid bind address: %s", bind_address.c_str());
             utils::CloseSocket(server_socket);
             return false;
         }
 
         if (bind(server_socket, (sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-            std::cerr << "Failed to bind to " << bind_address << ":" << bind_port << std::endl;
+            LOG_ERRORF("NodeTcpServer", "Failed to bind to %s:%d", bind_address.c_str(), bind_port);
             utils::CloseSocket(server_socket);
             return false;
         }
@@ -124,38 +128,39 @@ namespace mpc_engine::node::network
         );
 
         is_initialized = true;
-        std::cout << "NodeTcpServer initialized with " << num_handler_threads << " handler threads" << std::endl;
+        LOG_INFOF("NodeTcpServer", "NodeTcpServer initialized with %d handler threads", num_handler_threads);
         return true;
     }
 
     bool NodeTcpServer::Start() 
     {
         if (!is_initialized.load() || is_running.load()) {
+            LOG_WARN("NodeTcpServer", "NodeTcpServer is already running or not initialized");
             return false;
         }
 
         if (listen(server_socket, 1) < 0) {
-            std::cerr << "Failed to listen on socket" << std::endl;
+            LOG_ERROR("NodeTcpServer", "Failed to listen on socket");
             return false;
         }
 
         // 커널 방화벽 설정 (옵션)
         if (enable_kernel_firewall) {
             if (!security_config.trusted_coordinator_ip.empty()) {
-                std::cout << "[SECURITY] Configuring kernel-level firewall..." << std::endl;
+                LOG_INFO("NodeTcpServer", "Configuring kernel-level firewall...");
                 
                 if (utils::KernelFirewall::ConfigureNodeFirewall(
                     bind_port, 
                     security_config.trusted_coordinator_ip
                 )) {
-                    std::cout << "[SECURITY] ✓ Kernel firewall active" << std::endl;
-                    std::cout << "[SECURITY] ✓ SYN packets from untrusted IPs will be DROPped at kernel level" << std::endl;
+                    LOG_INFO("NodeTcpServer", "✓ Kernel firewall active");
+                    LOG_INFO("NodeTcpServer", "✓ SYN packets from untrusted IPs will be DROPped at kernel level");
                 } else {
-                    std::cerr << "[SECURITY] ⚠ Failed to configure kernel firewall" << std::endl;
-                    std::cerr << "[SECURITY] ⚠ Falling back to application-level security only" << std::endl;
+                    LOG_WARN("NodeTcpServer", "⚠ Failed to configure kernel firewall");
+                    LOG_WARN("NodeTcpServer", "⚠ Falling back to application-level security only");
                 }
             } else {
-                std::cerr << "[SECURITY] ⚠ Kernel firewall enabled but no trusted IP set" << std::endl;
+                LOG_ERROR("NodeTcpServer", "⚠ Kernel firewall enabled but no trusted IP set");
             }
         }
 
@@ -164,18 +169,19 @@ namespace mpc_engine::node::network
         
         // Start Connection threads
         connection_thread = std::thread(&NodeTcpServer::ConnectionLoop, this);
-        
-        std::cout << "NodeTcpServer started on " << bind_address << ":" << bind_port << std::endl;
+
+        LOG_INFOF("NodeTcpServer", "NodeTcpServer started on %s:%d", bind_address.c_str(), bind_port);
         return true;
     }
 
     void NodeTcpServer::Stop() 
     {
         if (!is_running.load()) {
+            LOG_WARN("NodeTcpServer", "NodeTcpServer is not running");
             return;
         }
 
-        std::cout << "Stopping NodeTcpServer..." << std::endl;
+        LOG_INFO("NodeTcpServer", "Stopping NodeTcpServer...");
         is_running = false;
 
         // 🔹 1단계: 서버 소켓 종료 (accept 차단)
@@ -187,7 +193,7 @@ namespace mpc_engine::node::network
 
         // 🔹 2단계: 커널 방화벽 규칙 제거
         if (enable_kernel_firewall) {
-            std::cout << "[SECURITY] Removing kernel firewall rules..." << std::endl;
+            LOG_INFO("NodeTcpServer", "Removing kernel firewall rules...");
             utils::KernelFirewall::RemoveNodeFirewall(bind_port);
         }
 
@@ -196,70 +202,69 @@ namespace mpc_engine::node::network
 
         // 🔹 4단계: ThreadPool Shutdown
         if (handler_pool) {
-            std::cout << "[ThreadPool] Shutting down handlers..." << std::endl;
+            LOG_INFO("NodeTcpServer", "Shutting down handlers...");
             handler_pool->Shutdown();
         }
 
         // 🔹 5단계: Send Queue Shutdown
         if (send_queue) {
-            std::cout << "[Queue] Shutting down send queue..." << std::endl;
+            LOG_INFO("NodeTcpServer", "Shutting down send queue...");
             send_queue->Shutdown();
         }
 
         // 6단계: 스레드 안전 종료 (타임아웃 적용)
-        std::cout << "[Threads] Waiting for threads to stop (timeout: " 
-                  << THREAD_JOIN_TIMEOUT_MS << "ms)..." << std::endl;
+        LOG_INFOF("NodeTcpServer", "Waiting for threads to stop (timeout: %d ms)", THREAD_JOIN_TIMEOUT_MS);
 
         // Connection thread
         if (connection_thread.joinable()) {
             utils::JoinResult result = utils::JoinWithTimeout(connection_thread, THREAD_JOIN_TIMEOUT_MS);
-            std::cout << "  Connection thread: " << utils::JoinResultToString(result) << std::endl;
-            
+            LOG_INFOF("NodeTcpServer", "  Connection thread: %s", utils::JoinResultToString(result));
+
             if (result == utils::JoinResult::TIMEOUT) {
-                std::cerr << "  ⚠️  Connection thread did not stop in time!" << std::endl;
+                LOG_ERROR("NodeTcpServer", "  ⚠️  Connection thread did not stop in time!");
             }
         }
 
         // Receive thread
         if (receive_thread.joinable()) {
             utils::JoinResult result = utils::JoinWithTimeout(receive_thread, THREAD_JOIN_TIMEOUT_MS);
-            std::cout << "  Receive thread: " << utils::JoinResultToString(result) << std::endl;
+            LOG_INFOF("NodeTcpServer", "  Receive thread: %s", utils::JoinResultToString(result));
             
             if (result == utils::JoinResult::TIMEOUT) {
-                std::cerr << "  ⚠️  Receive thread did not stop in time!" << std::endl;
+                LOG_ERROR("NodeTcpServer", "  ⚠️  Receive thread did not stop in time!");
             }
         }
 
         // Send thread
         if (send_thread.joinable()) {
             utils::JoinResult result = utils::JoinWithTimeout(send_thread, THREAD_JOIN_TIMEOUT_MS);
-            std::cout << "  Send thread: " << utils::JoinResultToString(result) << std::endl;
+            LOG_INFOF("NodeTcpServer", "  Send thread: %s", utils::JoinResultToString(result));
             
             if (result == utils::JoinResult::TIMEOUT) {
-                std::cerr << "  ⚠️  Send thread did not stop in time!" << std::endl;
+                LOG_ERROR("NodeTcpServer", "  ⚠️  Send thread did not stop in time!");
             }
         }
 
-        std::cout << "NodeTcpServer stopped" << std::endl;
+        LOG_INFO("NodeTcpServer", "NodeTcpServer stopped");
     }
 
     bool NodeTcpServer::PrepareShutdown(uint32_t timeout_ms) 
     {
-        std::cout << "\n========================================" << std::endl;
-        std::cout << "  Preparing Graceful Shutdown" << std::endl;
-        std::cout << "========================================" << std::endl;
+        LOG_INFO("NodeTcpServer", "========================================");
+        LOG_INFO("NodeTcpServer", "  Preparing Graceful Shutdown");
+        LOG_INFO("NodeTcpServer", "========================================");
 
-        std::cout << "[1/3] Stopping new connections..." << std::endl;
+        LOG_INFO("NodeTcpServer", "[1/3] Stopping new connections...");
         StopAcceptingConnections();
 
-        std::cout << "[2/3] Waiting for pending requests..." << std::endl;
+        LOG_INFO("NodeTcpServer", "[2/3] Waiting for pending requests...");
         auto start = std::chrono::steady_clock::now();
         bool completed = false;
 
         while (true) {
             uint32_t pending = GetPendingRequests();
             if (pending == 0) {
-                std::cout << "  ✓ All requests completed" << std::endl;
+                LOG_INFO("NodeTcpServer", "  ✓ All requests completed");
                 completed = true;
                 break;
             }
@@ -269,20 +274,20 @@ namespace mpc_engine::node::network
             ).count();
 
             if (elapsed > timeout_ms) {
-                std::cout << "  ⚠ Timeout: " << pending << " requests pending" << std::endl;
+                LOG_INFOF("NodeTcpServer", "  ⚠ Timeout: %d requests pending", pending);
                 break;
             }
 
-            std::cout << "  Pending: " << pending << " (" << elapsed << "ms)" << std::endl;
+            LOG_INFOF("NodeTcpServer", "  Pending: %d (%dms)", pending, elapsed);
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
 
-        std::cout << "[3/3] Additional cleanup..." << std::endl;
+        LOG_INFO("NodeTcpServer", "[3/3] Additional cleanup...");
         // TODO: 나중에 여기에 DB 커밋, 로그 플러시 등 추가
 
-        std::cout << "========================================" << std::endl;
-        std::cout << (completed ? "  ✓ Ready for shutdown" : "  ⚠ Forced shutdown") << std::endl;
-        std::cout << "========================================\n" << std::endl;
+        LOG_INFO("NodeTcpServer", "========================================");
+        LOG_INFO("NodeTcpServer", completed ? "  ✓ Ready for shutdown" : "  ⚠ Forced shutdown");
+        LOG_INFO("NodeTcpServer", "========================================");
 
         return completed;
     }
@@ -306,14 +311,15 @@ namespace mpc_engine::node::network
 
     void NodeTcpServer::ConnectionLoop() 
     {
-        std::cout << "ConnectionLoop Listening on " << bind_address << ":" << bind_port << std::endl;
+        LOG_INFOF("NodeTcpServer", "ConnectionLoop Listening on %s:%d", bind_address.c_str(), bind_port);
         
         if (!security_config.trusted_coordinator_ip.empty()) {
-            std::cout << "[SECURITY] Trusted Coordinator: " << security_config.trusted_coordinator_ip << std::endl;
+            LOG_INFOF("NodeTcpServer", "[SECURITY] Trusted Coordinator: %s", security_config.trusted_coordinator_ip.c_str());
         }
         
         while (is_running.load()) {
             if (!accepting_connections.load()) {
+                LOG_INFO("NodeTcpServer", "ConnectionLoop: Not accepting connections");
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 continue;
             }
@@ -327,7 +333,7 @@ namespace mpc_engine::node::network
             
             if (client_socket == INVALID_SOCKET_VALUE) {
                 if (is_running.load()) {
-                    std::cerr << "Accept failed" << std::endl;
+                    LOG_ERROR("NodeTcpServer", "Accept failed");
                 }
                 continue;
             }
@@ -338,7 +344,7 @@ namespace mpc_engine::node::network
 
             // Security check
             if (!IsAuthorized(client_ip)) {
-                std::cerr << "[SECURITY] Rejected connection from " << client_ip << ":" << client_port << std::endl;
+                LOG_ERRORF("NodeTcpServer", "[SECURITY] Rejected connection from %s:%d", client_ip, client_port);
                 utils::CloseSocket(client_socket);
                 continue;
             }
@@ -346,11 +352,11 @@ namespace mpc_engine::node::network
             // Close existing connection
             ForceCloseExistingConnection();
 
-            std::cout << "[SECURITY] Accepted connection from " << client_ip << ":" << client_port << std::endl;
+            LOG_INFOF("NodeTcpServer", "[SECURITY] Accepted connection from %s:%d", client_ip, client_port);
             HandleCoordinatorConnection(client_socket, client_ip, client_port);
         }
         
-        std::cout << "Connection thread stopped" << std::endl;
+        LOG_INFO("NodeTcpServer", "Connection thread stopped");
     }
 
     void NodeTcpServer::HandleCoordinatorConnection(socket_t client_socket, const std::string& client_ip, uint16_t client_port) 
@@ -362,11 +368,13 @@ namespace mpc_engine::node::network
         tls_config.handshake_timeout_ms = 10000;
 
         if (!tls_connection->AcceptServer(*tls_context, client_socket, tls_config)) {
+            LOG_ERROR("NodeTcpServer", "TLS Accept failed");
             utils::CloseSocket(client_socket);
             return;
         }
 
         if (!tls_connection->DoHandshake()) {
+            LOG_ERROR("NodeTcpServer", "TLS Handshake failed");
             utils::CloseSocket(client_socket);
             return;
         }
@@ -419,10 +427,10 @@ namespace mpc_engine::node::network
 
     void NodeTcpServer::ReceiveLoop()
     {
-        std::cout << "Receive thread started" << std::endl;
+        LOG_DEBUG("NodeTcpServer", "Receive thread started");
 
         if (!message_handler) {
-            std::cerr << "[ERROR] message_handler is null, cannot process messages" << std::endl;
+            LOG_ERROR("NodeTcpServer", "message_handler is null, cannot process messages");
             return;
         }
 
@@ -431,7 +439,7 @@ namespace mpc_engine::node::network
 
             // socket 파라미터 제거 - ReceiveMessage 내부에서 TLS Connection 가져옴
             if (!ReceiveMessage(request)) {  // socket 파라미터는 더미값
-                std::cerr << "[INFO] Connection lost or receive failed" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Connection lost or receive failed");
                 break;
             }
         
@@ -454,7 +462,7 @@ namespace mpc_engine::node::network
                 handler_pool->SubmitOwned(ProcessMessage, std::move(context));
 
             } catch (const std::runtime_error& e) {
-                std::cerr << "[ERROR] Failed to submit task (pool stopped): " << e.what() << std::endl;
+                LOG_ERRORF("NodeTcpServer", "Failed to submit task (pool stopped): %s", e.what());
 
                 utils::QueueResult result = send_queue->TryPush(
                     CreateErrorResponse(request.header.message_type, "Server shutting down", -1),
@@ -462,13 +470,13 @@ namespace mpc_engine::node::network
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push error response: " << utils::QueueResultToString(result) << std::endl;
+                    LOG_ERRORF("NodeTcpServer", "Failed to push error response: %s", utils::QueueResultToString(result));
                 }
 
                 break;
 
             } catch (const std::exception& e) {
-                std::cerr << "[ERROR] Failed to submit task: " << e.what() << std::endl;
+                LOG_ERRORF("NodeTcpServer", "Failed to submit task: %s", e.what());
 
                 utils::QueueResult result = send_queue->TryPush(
                     CreateErrorResponse(request.header.message_type, "Server busy", -1),
@@ -476,30 +484,31 @@ namespace mpc_engine::node::network
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push error response: " << utils::QueueResultToString(result) << std::endl;
+                    LOG_ERRORF("NodeTcpServer", "Failed to push error response: %s", utils::QueueResultToString(result));
                 }
 
                 handler_errors++;
             }
         }
 
-        std::cout << "Receive thread stopped" << std::endl;
+        LOG_DEBUG("NodeTcpServer", "Receive thread stopped");
     }
 
     void NodeTcpServer::SendLoop()
     {
-        std::cout << "Send thread started" << std::endl;
+        LOG_DEBUG("NodeTcpServer", "Send thread started");
 
         while (is_running.load() && HasActiveConnection()) {
             NetworkMessage outMessage;
             utils::QueueResult result = send_queue->Pop(outMessage);
             if (result != utils::QueueResult::SUCCESS) {
+                LOG_ERRORF("NodeTcpServer", "Failed to pop message from send queue: %s", utils::QueueResultToString(result));
                 continue;
             }
         
             // socket 파라미터 제거 - SendMessage 내부에서 TLS Connection 가져옴
             if (!SendMessage(outMessage)) {  // socket 파라미터는 더미값
-                std::cerr << "[INFO] Connection lost or send failed" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Connection lost or send failed");
                 break;
             }
         
@@ -514,7 +523,7 @@ namespace mpc_engine::node::network
             }
         }
 
-        std::cout << "Send thread stopped" << std::endl;
+        LOG_DEBUG("NodeTcpServer", "Send thread stopped");
     }
 
     /**
@@ -542,7 +551,7 @@ namespace mpc_engine::node::network
             // 1. 요청 검증
             ValidationResult validation = context->request.Validate();
             if (validation != ValidationResult::OK) {
-                std::cerr << "[ERROR] Invalid request in handler: " << ValidationResultToString(validation) << std::endl;
+                LOG_ERRORF("NodeTcpServer", "Invalid request in handler: %s", ValidationResultToString(validation));
 
                 utils::QueueResult result = context->send_queue->TryPush(
                     CreateErrorResponse(
@@ -554,14 +563,14 @@ namespace mpc_engine::node::network
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push response: " << utils::QueueResultToString(result) << std::endl;
+                    LOG_ERRORF("NodeTcpServer", "Failed to push response: %s", utils::QueueResultToString(result));
                 }
                 return;
             }
 
             // 2. 핸들러 존재 확인
             if (!context->handler) {
-                std::cerr << "[ERROR] Handler is null" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Handler is null");
 
                 utils::QueueResult result = context->send_queue->TryPush(
                     CreateErrorResponse(
@@ -573,7 +582,7 @@ namespace mpc_engine::node::network
                 );
 
                 if (result != utils::QueueResult::SUCCESS) {
-                    std::cerr << "[ERROR] Failed to push response: " << utils::QueueResultToString(result) << std::endl;
+                    LOG_ERRORF("NodeTcpServer", "Failed to push response: %s", utils::QueueResultToString(result));
                 }
                 return;
             }
@@ -591,11 +600,11 @@ namespace mpc_engine::node::network
             );
 
             if (result != utils::QueueResult::SUCCESS) {
-                std::cerr << "[ERROR] Failed to push response: " << utils::QueueResultToString(result) << std::endl;
+                LOG_ERRORF("NodeTcpServer", "Failed to push response: %s", utils::QueueResultToString(result));
             }
 
         } catch (const std::exception& e) {
-            std::cerr << "[ERROR] Exception in ProcessMessage: " << e.what() << std::endl;
+            LOG_ERRORF("NodeTcpServer", "Exception in ProcessMessage: %s", e.what());
 
             // 예외 발생 시에도 에러 응답 시도
             try {
@@ -608,7 +617,7 @@ namespace mpc_engine::node::network
                     std::chrono::milliseconds(100)
                 );
             } catch (...) {
-                std::cerr << "[ERROR] Failed to send error response" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Failed to send error response");
             }
         }
     }
@@ -625,18 +634,21 @@ namespace mpc_engine::node::network
         }
 
         if (!tls_conn) {
+            LOG_ERROR("NodeTcpServer", "Failed to get TLS connection");
             return false;
         }
 
         // 기존 utils::SendExact 로직을 TLS로 교체
         TlsError error = tls_conn->WriteExact(&outMessage.header, sizeof(MessageHeader));
         if (error != TlsError::NONE) {
+            LOG_ERRORF("NodeTcpServer", "Failed to send message header: %s", TlsErrorToString(error));
             return false;
         }
 
         if (outMessage.header.body_length > 0) {
             error = tls_conn->WriteExact(outMessage.body.data(), outMessage.body.size());
             if (error != TlsError::NONE) {
+                LOG_ERRORF("NodeTcpServer", "Failed to send message body: %s", TlsErrorToString(error));
                 return false;
             }
         }
@@ -656,6 +668,7 @@ namespace mpc_engine::node::network
         }
 
         if (!tls_conn) {
+            LOG_ERROR("NodeTcpServer", "Failed to get TLS connection");
             return false;
         }
 
@@ -663,7 +676,7 @@ namespace mpc_engine::node::network
         TlsError error = tls_conn->ReadExact(&outMessage.header, sizeof(MessageHeader));
         if (error != TlsError::NONE) {
             if (error == TlsError::CONNECTION_CLOSED) {
-                std::cout << "[INFO] Connection closed gracefully" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Connection closed gracefully");
             }
             return false;
         }
@@ -671,10 +684,10 @@ namespace mpc_engine::node::network
         // 기존 검증 로직 그대로 유지
         ValidationResult validation = outMessage.header.ValidateBasic();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Header validation failed: " << ValidationResultToString(validation) << std::endl;
-            std::cerr << "[SECURITY]   Magic: 0x" << std::hex << outMessage.header.magic << std::dec << std::endl;
-            std::cerr << "[SECURITY]   Version: " << outMessage.header.version << std::endl;
-            std::cerr << "[SECURITY]   Body length: " << outMessage.header.body_length << std::endl;
+            LOG_ERRORF("NodeTcpServer", "Header validation failed: %s", ValidationResultToString(validation));
+            LOG_ERRORF("NodeTcpServer", "   Magic: 0x%x", outMessage.header.magic);
+            LOG_ERRORF("NodeTcpServer", "   Version: %d", outMessage.header.version);
+            LOG_ERRORF("NodeTcpServer", "   Body length: %d", outMessage.header.body_length);
             return false;
         }
 
@@ -682,19 +695,20 @@ namespace mpc_engine::node::network
             try {
                 outMessage.body.resize(outMessage.header.body_length);
             } catch (const std::bad_alloc& e) {
-                std::cerr << "[SECURITY] Memory allocation failed for body: " << e.what() << std::endl;
+                LOG_ERRORF("NodeTcpServer", "Memory allocation failed for body: %s", e.what());
                 return false;
             }
         
             error = tls_conn->ReadExact(outMessage.body.data(), outMessage.header.body_length);
             if (error != TlsError::NONE) {
+                LOG_ERRORF("NodeTcpServer", "Failed to receive message body: %s", TlsErrorToString(error));
                 return false;
             }
         }
 
         validation = outMessage.Validate();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Message validation failed: " << ValidationResultToString(validation) << std::endl;
+            LOG_ERRORF("NodeTcpServer", "Message validation failed: %s", ValidationResultToString(validation));
             return false;
         }
 
@@ -711,7 +725,7 @@ namespace mpc_engine::node::network
         std::lock_guard<std::mutex> lock(connection_mutex);
         
         if (coordinator_connection) {
-            std::cout << "Closing existing connection" << std::endl;
+            LOG_INFO("NodeTcpServer", "Closing existing connection");
             
             if (coordinator_connection->tls_connection) {
                 coordinator_connection->tls_connection->Close();
@@ -740,7 +754,7 @@ namespace mpc_engine::node::network
     void NodeTcpServer::SetTrustedCoordinator(const std::string& ip)
     {
         security_config.trusted_coordinator_ip = ip;
-        std::cout << "[SECURITY] Trusted Coordinator set to: " << ip << std::endl;
+        LOG_INFOF("NodeTcpServer", "Trusted Coordinator set to: %s", ip.c_str());
     }
 
     bool NodeTcpServer::HasActiveConnection() const

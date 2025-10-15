@@ -4,11 +4,11 @@
 #include "common/kms/include/KMSManager.hpp"
 #include "common/env/EnvManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
+#include "common/utils/logger/Logger.hpp"
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
-#include <iostream>
 
 namespace mpc_engine::coordinator::network
 {
@@ -43,16 +43,15 @@ namespace mpc_engine::coordinator::network
 
     bool NodeTcpClient::Initialize() {
         if (is_initialized.load()) {
-            std::cout << "[NodeTcpClient] Already initialized: " << connection_info.node_id << std::endl;
+            LOG_INFOF("NodeTcpClient", "Already initialized: %s", connection_info.node_id.c_str());
             return true;
         }
 
-        std::cout << "[NodeTcpClient] Initializing " << connection_info.node_id << "..." << std::endl;
+        LOG_INFOF("NodeTcpClient", "Initializing %s...", connection_info.node_id.c_str());
 
         // 1. TLS Context 초기화
         if (!InitializeTlsContext()) {
-            std::cerr << "[NodeTcpClient] Failed to initialize TLS context for: " 
-                      << connection_info.node_id << std::endl;
+            LOG_ERRORF("NodeTcpClient", "Failed to initialize TLS context for: %s", connection_info.node_id.c_str());
             return false;
         }
 
@@ -60,7 +59,7 @@ namespace mpc_engine::coordinator::network
         send_queue = std::make_unique<utils::ThreadSafeQueue<NetworkMessage>>(100);
 
         is_initialized = true;
-        std::cout << "[NodeTcpClient] Initialized successfully: " << connection_info.node_id << std::endl;
+        LOG_INFOF("NodeTcpClient", "Initialized successfully: %s", connection_info.node_id.c_str());
         return true;
     }
 
@@ -71,7 +70,7 @@ namespace mpc_engine::coordinator::network
             TlsConfig config = TlsConfig::CreateSecureClientConfig();
         
             if (!tls_context->Initialize(config)) {
-                std::cerr << "[NodeTcpClient] TLS context initialization failed" << std::endl;
+                LOG_ERROR("NodeTcpClient", "TLS context initialization failed");
                 return false;
             }
         
@@ -83,12 +82,12 @@ namespace mpc_engine::coordinator::network
 
             std::string ca_pem = ReadOnlyResLoaderManager::Instance().ReadFile(tls_cert_path + tls_ca);
             if (ca_pem.empty()) {
-                std::cerr << "[NodeTcpClient] Failed to load CA certificate from KMS" << std::endl;
+                LOG_ERRORF("NodeTcpClient", "Failed to load CA certificate from KMS");
                 return false;
             }
         
             if (!tls_context->LoadCA(ca_pem)) {
-                std::cerr << "[NodeTcpClient] Failed to load CA certificate to context" << std::endl;
+                LOG_ERRORF("NodeTcpClient", "Failed to load CA certificate to context");
                 return false;
             }
         
@@ -97,7 +96,7 @@ namespace mpc_engine::coordinator::network
             std::string private_key_pem = kms.GetSecret(connection_info.private_key_id);
         
             if (certificate_pem.empty() || private_key_pem.empty()) {
-                std::cerr << "[NodeTcpClient] Empty certificate or key for node: " << connection_info.node_id << std::endl;
+                LOG_ERRORF("NodeTcpClient", "Empty certificate or key for node: %s", connection_info.node_id.c_str());
                 return false;
             }
         
@@ -106,15 +105,15 @@ namespace mpc_engine::coordinator::network
             cert_data.private_key_pem = private_key_pem;
         
             if (!tls_context->LoadCertificate(cert_data)) {
-                std::cerr << "[NodeTcpClient] Failed to load certificate for node: " << connection_info.node_id << std::endl;
+                LOG_ERRORF("NodeTcpClient", "Failed to load certificate for node: %s", connection_info.node_id.c_str());
                 return false;
             }
-        
-            std::cout << "[NodeTcpClient] TLS context initialized with mTLS support for node: " << connection_info.node_id << std::endl;
+
+            LOG_INFOF("NodeTcpClient", "TLS context initialized with mTLS support for node: %s", connection_info.node_id.c_str());
             return true;
         
         } catch (const std::exception& e) {
-            std::cerr << "[NodeTcpClient] TLS initialization exception: " << e.what() << std::endl;
+            LOG_ERRORF("NodeTcpClient", "TLS initialization exception: %s", e.what());
             return false;
         }
     }
@@ -127,7 +126,7 @@ namespace mpc_engine::coordinator::network
         }
 
         if (!is_initialized.load()) {
-            std::cerr << "[NodeTcpClient] Not initialized. Call Initialize() first: " << connection_info.node_id << std::endl;
+            LOG_ERRORF("NodeTcpClient", "Not initialized. Call Initialize() first: %s", connection_info.node_id.c_str());
             return false;
         }
 
@@ -161,7 +160,7 @@ namespace mpc_engine::coordinator::network
         send_thread = std::thread(&NodeTcpClient::SendLoop, this);
         receive_thread = std::thread(&NodeTcpClient::ReceiveLoop, this);
 
-        std::cout << "[NodeTcpClient] Threads started for " << connection_info.node_id << std::endl;
+        LOG_INFOF("NodeTcpClient", "Threads started for %s", connection_info.node_id.c_str());
 
         if (connected_callback) {
             connected_callback(connection_info.node_id);
@@ -196,14 +195,14 @@ namespace mpc_engine::coordinator::network
         if (send_thread.joinable()) {
             utils::JoinResult result = utils::JoinWithTimeout(send_thread, THREAD_JOIN_TIMEOUT_MS);
             if (result == utils::JoinResult::TIMEOUT) {
-                std::cerr << "[NodeTcpClient] Send thread join timeout" << std::endl;
+                LOG_ERRORF("NodeTcpClient", "Send thread join timeout");
             }
         }
 
         if (receive_thread.joinable()) {
             utils::JoinResult result = utils::JoinWithTimeout(receive_thread, THREAD_JOIN_TIMEOUT_MS);
             if (result == utils::JoinResult::TIMEOUT) {
-                std::cerr << "[NodeTcpClient] Receive thread join timeout" << std::endl;
+                LOG_ERRORF("NodeTcpClient", "Receive thread join timeout"); 
             }
         }
 
@@ -225,15 +224,17 @@ namespace mpc_engine::coordinator::network
             disconnected_callback(node_id_copy);  // ← 로그용, 간단!
         }
 
-        std::cout << "[NodeTcpClient] Disconnected from " << node_id_copy << std::endl;
+        LOG_INFOF("NodeTcpClient", "Disconnected from %s", node_id_copy.c_str());
     }
 
     AsyncRequestResult NodeTcpClient::SendRequestAsync(const CoordinatorNodeMessage* request) {
         if (!request) {
+            LOG_ERRORF("NodeTcpClient", "Request is null");
             throw std::invalid_argument("Request is null");
         }
 
         if (!IsConnected()) {
+            LOG_ERRORF("NodeTcpClient", "Not connected to node: %s", connection_info.node_id.c_str());
             throw std::runtime_error("Not connected to node: " + connection_info.node_id);
         }
 
@@ -264,6 +265,7 @@ namespace mpc_engine::coordinator::network
                 pending_requests.erase(req_id);
             }
 
+            LOG_ERRORF("NodeTcpClient", "Failed to push request to queue: %s", utils::QueueResultToString(result));
             throw std::runtime_error(
                 "Failed to push request to queue: " + std::string(utils::QueueResultToString(result))
             );
@@ -293,9 +295,8 @@ namespace mpc_engine::coordinator::network
 
             // 타임아웃 30초로 대기
             if (result.future.wait_for(std::chrono::seconds(30)) == std::future_status::timeout) {
-                std::cerr << "[NodeTcpClient] Request timeout (30s) for node: " 
-                          << connection_info.node_id 
-                          << ", request_id: " << result.request_id << std::endl;
+                LOG_ERRORF("NodeTcpClient", "Request timeout (30s) for node: %s, request_id: %lu", 
+                    connection_info.node_id.c_str(), result.request_id);
 
                 // ✅ pending에서 제거
                 {
@@ -323,7 +324,7 @@ namespace mpc_engine::coordinator::network
             return ConvertFromNetworkMessage(response);
 
         } catch (const std::exception& e) {
-            std::cerr << "[NodeTcpClient] SendRequest exception: " << e.what() << std::endl;
+            LOG_ERRORF("NodeTcpClient", "SendRequest exception: %s", e.what());
             return nullptr;
         }
     }
@@ -365,7 +366,7 @@ namespace mpc_engine::coordinator::network
         TlsError error = tls_connection->ReadExact(&outMessage.header, sizeof(outMessage.header));
         if (error != TlsError::NONE) {
             if (error == TlsError::CONNECTION_CLOSED) {
-                std::cout << "[NodeTcpClient] Connection closed gracefully" << std::endl;
+                LOG_WARN("NodeTcpClient", "Connection closed gracefully");
             }
             return false;
         }
@@ -373,7 +374,7 @@ namespace mpc_engine::coordinator::network
         // 헤더 유효성 검사
         ValidationResult validation = outMessage.header.ValidateBasic();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Header validation failed: " << ValidationResultToString(validation) << std::endl;
+            LOG_ERRORF("NodeTcpClient", "Header validation failed: %s", ValidationResultToString(validation));
             return false;
         }
 
@@ -382,12 +383,13 @@ namespace mpc_engine::coordinator::network
             try {
                 outMessage.body.resize(outMessage.header.body_length);
             } catch (const std::bad_alloc& e) {
-                std::cerr << "[SECURITY] Memory allocation failed for body: " << e.what() << std::endl;
+                LOG_ERRORF("NodeTcpClient", "Memory allocation failed for body: %s", e.what());
                 return false;
             }
         
             error = tls_connection->ReadExact(outMessage.body.data(), outMessage.header.body_length);
             if (error != TlsError::NONE) {
+                LOG_ERRORF("NodeTcpClient", "Failed to read body: %s", TlsErrorToString(error));
                 return false;
             }
         }
@@ -395,7 +397,7 @@ namespace mpc_engine::coordinator::network
         // 메시지 전체 유효성 검사
         validation = outMessage.Validate();
         if (validation != ValidationResult::OK) {
-            std::cerr << "[SECURITY] Message validation failed: " << ValidationResultToString(validation) << std::endl;
+            LOG_ERRORF("NodeTcpClient", "Message validation failed: %s", ValidationResultToString(validation));
             return false;
         }
 
@@ -416,28 +418,26 @@ namespace mpc_engine::coordinator::network
             std::string deploy_env = EnvManager::Instance().GetString("DEPLOY_ENV");
             std::string domain_suffix = EnvManager::Instance().GetString("TLS_DOMAIN_SUFFIX");
             tls_config.sni_hostname = connection_info.node_id + domain_suffix;
-            
-            std::cout << "[NodeTcpClient] Establishing TLS connection to " 
-                      << connection_info.node_id << " (SNI: " << tls_config.sni_hostname 
-                      << ", env: " << deploy_env << ")" << std::endl;
-            
+
+            LOG_INFOF("NodeTcpClient", "Establishing TLS connection to %s (SNI: %s, env: %s)",
+                      connection_info.node_id.c_str(), tls_config.sni_hostname.c_str(), deploy_env.c_str());
+
             if (!tls_connection->ConnectClient(*tls_context, connection_info.node_socket, tls_config)) {
-                std::cerr << "[NodeTcpClient] TLS client connect failed for " << connection_info.node_id << std::endl;
+                LOG_ERRORF("NodeTcpClient", "TLS client connect failed for %s", connection_info.node_id.c_str());
                 return false;
             }
 
             if (!tls_connection->DoHandshake()) {
-                std::cerr << "[NodeTcpClient] TLS handshake failed for " << connection_info.node_id << std::endl;
+                LOG_ERRORF("NodeTcpClient", "TLS handshake failed for %s", connection_info.node_id.c_str());
                 return false;
             }
 
-            std::cout << "[NodeTcpClient] TLS connection established with " << connection_info.node_id 
-                      << " using certificate " << tls_config.sni_hostname << " ✓" << std::endl;
+            LOG_INFOF("NodeTcpClient", "TLS connection established with %s using certificate %s ✓",
+                      connection_info.node_id.c_str(), tls_config.sni_hostname.c_str());
             return true;
 
         } catch (const std::exception& e) {
-            std::cerr << "[NodeTcpClient] TLS connection exception for " << connection_info.node_id 
-                      << ": " << e.what() << std::endl;
+            LOG_ERRORF("NodeTcpClient", "TLS connection exception for %s: %s", connection_info.node_id.c_str(), e.what());
             return false;
         }
     }
@@ -518,7 +518,7 @@ namespace mpc_engine::coordinator::network
     }
 
     void NodeTcpClient::SendLoop() {
-        std::cout << "[NodeTcpClient::SendLoop] Started for " << connection_info.node_id << std::endl;
+        LOG_DEBUGF("NodeTcpClient", "SendLoop started for %s", connection_info.node_id.c_str());
         
         while (threads_running.load()) {
             NetworkMessage msg;
@@ -527,19 +527,18 @@ namespace mpc_engine::coordinator::network
             utils::QueueResult result = send_queue->Pop(msg);
 
             if (result == utils::QueueResult::SHUTDOWN) {
-                std::cout << "[NodeTcpClient::SendLoop] Queue shutdown" << std::endl;
+                LOG_DEBUGF("NodeTcpClient", "SendLoop stopped for %s: Queue shutdown", connection_info.node_id.c_str());
                 break;
             }
 
             if (result != utils::QueueResult::SUCCESS) {
-                std::cerr << "[NodeTcpClient::SendLoop] Pop failed: " 
-                          << utils::QueueResultToString(result) << std::endl;
+                LOG_ERRORF("NodeTcpClient", "SendLoop pop failed: %s", utils::QueueResultToString(result));
                 break;
             }
 
             // 메시지 전송
             if (!SendMessage(msg)) {
-                std::cerr << "[NodeTcpClient::SendLoop] SendMessage failed" << std::endl;
+                LOG_ERRORF("NodeTcpClient", "SendLoop SendMessage failed");
 
                 // 전송 실패 시 해당 요청의 Promise에 에러 설정
                 uint64_t req_id = msg.header.request_id;
@@ -560,18 +559,18 @@ namespace mpc_engine::coordinator::network
             connection_info.last_successful_communication = utils::GetCurrentTimeMs();
         }
 
-        std::cout << "[NodeTcpClient::SendLoop] Stopped" << std::endl;
+        LOG_DEBUGF("NodeTcpClient", "SendLoop stopped for %s", connection_info.node_id.c_str());
     }
 
     void NodeTcpClient::ReceiveLoop() {
-        std::cout << "[NodeTcpClient::ReceiveLoop] Started for " << connection_info.node_id << std::endl;
-        
+        LOG_DEBUGF("NodeTcpClient", "ReceiveLoop started for %s", connection_info.node_id.c_str());
+
         while (threads_running.load()) {
             NetworkMessage response;
 
             // 응답 수신
             if (!ReceiveMessage(response)) {
-                std::cerr << "[NodeTcpClient::ReceiveLoop] ReceiveMessage failed" << std::endl;
+                LOG_ERRORF("NodeTcpClient", "ReceiveLoop ReceiveMessage failed");
                 break;
             }
 
@@ -586,20 +585,18 @@ namespace mpc_engine::coordinator::network
                 try {
                     it->second.set_value(std::move(response));
                 } catch (const std::exception& e) {
-                    std::cerr << "[NodeTcpClient::ReceiveLoop] set_value failed: " 
-                              << e.what() << std::endl;
+                    LOG_ERRORF("NodeTcpClient", "ReceiveLoop set_value failed: %s", e.what());
                 }
                 pending_requests.erase(it);
             } else {
-                std::cerr << "[NodeTcpClient::ReceiveLoop] No pending request for ID: " 
-                          << req_id << std::endl;
+                LOG_ERRORF("NodeTcpClient", "ReceiveLoop No pending request for ID: %llu", req_id);
             }
 
             connection_info.successful_responses++;
             connection_info.last_successful_communication = utils::GetCurrentTimeMs();
         }
 
-        std::cout << "[NodeTcpClient::ReceiveLoop] Stopped" << std::endl;
+        LOG_DEBUGF("NodeTcpClient", "ReceiveLoop stopped for %s", connection_info.node_id.c_str());
     }
 
     void NodeTcpClient::NotifyError(NetworkError error, const std::string& message) {
@@ -618,12 +615,14 @@ namespace mpc_engine::coordinator::network
 
     NetworkMessage NodeTcpClient::ConvertToNetworkMessage(const CoordinatorNodeMessage* request) {
         if (!request) {
-        throw std::invalid_argument("Request is null");
+            LOG_ERROR("NodeTcpClient", "ConvertToNetworkMessage failed: Request is null");
+            throw std::invalid_argument("Request is null");
         }
     
         // Proto 메시지를 직렬화
         std::string serialized;
         if (!request->SerializeToString(&serialized)) {
+            LOG_ERROR("NodeTcpClient", "Failed to serialize protobuf message");
             throw std::runtime_error("Failed to serialize protobuf message");
         }
     
@@ -647,7 +646,7 @@ namespace mpc_engine::coordinator::network
         // body에서 Proto 메시지 역직렬화
         if (!message.body.empty()) {
             if (!response->ParseFromArray(message.body.data(), message.body.size())) {
-                std::cerr << "[NodeTcpClient] Failed to parse protobuf message" << std::endl;
+                LOG_ERROR("NodeTcpClient", "Failed to parse protobuf message");
                 return nullptr;
             }
         }

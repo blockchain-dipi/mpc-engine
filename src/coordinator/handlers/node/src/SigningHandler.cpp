@@ -2,18 +2,18 @@
 #include "coordinator/handlers/node/include/SigningHandler.hpp"
 #include "types/MessageTypes.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 #include <memory>
 
 namespace mpc_engine::coordinator::handlers::node
 {
     std::unique_ptr<CoordinatorNodeMessage> HandleSigningRequest(const CoordinatorNodeMessage* request) 
     {
-        std::cout << "=== HandleSigningRequest ===" << std::endl;
+        LOG_DEBUG("SigningHandler", "Signing request received");
 
         if (!request->has_signing_request()) 
         {
-            std::cerr << "Request does not contain signing_request" << std::endl;
+            LOG_ERRORF("SigningHandler", "Request does not contain signing_request");
             return nullptr;
         }
 
@@ -24,10 +24,10 @@ namespace mpc_engine::coordinator::handlers::node
         SigningResponse* signingRes = response->mutable_signing_response();
         try 
         {
-            std::cout << "Processing key: " << signingReq.key_id() << std::endl;
-            std::cout << "Transaction: " << signingReq.transaction_data().substr(0, 50) << "..." << std::endl;
-            std::cout << "Threshold: " << signingReq.threshold() << std::endl;
-            std::cout << "Total shards: " << signingReq.total_shards() << std::endl;
+            LOG_DEBUGF("SigningHandler", "Processing key: %s", signingReq.key_id().c_str());
+            LOG_DEBUGF("SigningHandler", "Transaction: %s...", signingReq.transaction_data().substr(0, 50).c_str());
+            LOG_DEBUGF("SigningHandler", "Threshold: %d", signingReq.threshold());
+            LOG_DEBUGF("SigningHandler", "Total shards: %d", signingReq.total_shards());
 
             ResponseHeader* header = signingRes->mutable_header();
             header->set_success(true);
@@ -36,8 +36,8 @@ namespace mpc_engine::coordinator::handlers::node
             signingRes->set_key_id(signingReq.key_id());
             signingRes->set_signature("MOCK_SIGNATURE_" + signingReq.key_id() + "_" + std::to_string(utils::GetCurrentTimeMs()));
             signingRes->set_shard_index(0);
-            
-            std::cout << "Mock signing completed successfully" << std::endl;            
+
+            LOG_DEBUG("SigningHandler", "Mock signing completed successfully");
         }
         catch (const std::exception& e) 
         {

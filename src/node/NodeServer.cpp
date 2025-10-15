@@ -3,7 +3,7 @@
 #include "common/env/EnvManager.hpp"
 #include "node/handlers/include/NodeMessageRouter.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 
 namespace mpc_engine::node
 {
@@ -16,13 +16,16 @@ namespace mpc_engine::node
 
     NodeServer::NodeServer(const NodeConfig& config) {
         if (!config.IsValid()) {
-            std::cerr << "Invalid node configuration provided" << std::endl;
+            LOG_ERROR("NodeTcpServer", "Invalid node configuration provided");
             return;
         }
         node_config = config;
 
-        std::cout << "Node configuration set: " << config.node_id 
-                  << " (" << PlatformTypeToString(config.platform_type) << ")" << std::endl;
+        LOG_INFOF("NodeTcpServer", "Node configuration set: %s", config.node_id.c_str());
+        LOG_INFOF("NodeTcpServer", "  Platform: %s", PlatformTypeToString(config.platform_type).c_str());
+        LOG_INFOF("NodeTcpServer", "  Bind Address: %s:%d", config.bind_address.c_str(), config.bind_port);
+        LOG_INFOF("NodeTcpServer", "  Certificate Path: %s", config.certificate_path.c_str());
+        LOG_INFOF("NodeTcpServer", "  Private Key ID: %s", config.private_key_id.c_str());
 
         start_time = utils::GetCurrentTimeMs();
     }
@@ -33,12 +36,13 @@ namespace mpc_engine::node
 
     bool NodeServer::Initialize() {
         if (is_initialized.load()) {
+            LOG_WARN("NodeTcpServer", "Node server is already initialized");
             return true;
         }
 
         // Message Router 초기화
         if (!handlers::NodeMessageRouter::Instance().Initialize()) {
-            std::cerr << "Failed to initialize node message router" << std::endl;
+            LOG_ERROR("NodeTcpServer", "Failed to initialize node message router");
             return false;
         }
 
@@ -46,38 +50,42 @@ namespace mpc_engine::node
         tcp_server = std::make_unique<network::NodeTcpServer>(node_config.bind_address, node_config.bind_port, handler_threads);
 
         if (!tcp_server->Initialize(node_config.certificate_path, node_config.private_key_id)) {
+            LOG_ERROR("NodeTcpServer", "Failed to initialize TCP server");
             return false;
         }
 
         SetupCallbacks();
         is_initialized = true;
 
-        std::cout << "Node server initialized with message router" << std::endl;
+        LOG_INFO("NodeTcpServer", "Node server initialized with message router");
         return true;
     }
 
     bool NodeServer::Start() {
         if (!is_initialized.load() || is_running.load()) {
+            LOG_WARN("NodeTcpServer", "Node server is already running or not initialized");
             return false;
         }
 
         if (!tcp_server->Start()) {
+            LOG_ERROR("NodeTcpServer", "Failed to start TCP server");
             return false;
         }
 
         is_running = true;
-        std::cout << "Node server started: " << node_config.node_id 
-                  << " on " << node_config.bind_address << ":" << node_config.bind_port << std::endl;
+        LOG_INFOF("NodeTcpServer", "Node server started: %s", node_config.node_id.c_str());
+        LOG_INFOF("NodeTcpServer", " on %s:%d", node_config.bind_address.c_str(), node_config.bind_port);
         return true;
     }
 
     void NodeServer::Stop() {
         if (!is_running.load()) {
+            LOG_WARN("NodeTcpServer", "Node server is not running");
             return;
         }
 
         if (tcp_server) {
-            std::cout << "\nInitiating graceful shutdown..." << std::endl;
+            LOG_INFO("NodeTcpServer", "Initiating graceful shutdown...");
             tcp_server->PrepareShutdown(30000);  // 30초 타임아웃
         }
 
@@ -86,8 +94,8 @@ namespace mpc_engine::node
         if (tcp_server) {
             tcp_server->Stop();
         }
-        
-        std::cout << "Node server stopped: " << node_config.node_id << std::endl;
+
+        LOG_INFOF("NodeTcpServer", "Node server stopped: %s", node_config.node_id.c_str());
     }
 
     bool NodeServer::IsRunning() const {
@@ -118,24 +126,24 @@ namespace mpc_engine::node
     }
 
     void NodeServer::OnCoordinatorConnected(const network::NodeConnectionInfo& connection) {
-        std::cout << "Coordinator connected to node " << node_config.node_id 
-                  << ": " << connection.ToString() << std::endl;
+        LOG_INFOF("NodeTcpServer", "Coordinator connected to node %s: %s", 
+            node_config.node_id.c_str(), connection.ToString().c_str());
     }
 
     void NodeServer::OnCoordinatorDisconnected(const network::NodeConnectionInfo::DisconnectionInfo& connection) {
-        std::cout << "Coordinator disconnected from node " << node_config.node_id 
-                  << ": " << connection.coordinator_address << std::endl;
+        LOG_INFOF("NodeTcpServer", "Coordinator disconnected from node %s: %s", 
+            node_config.node_id.c_str(), connection.coordinator_address.c_str());
     }
 
     NetworkMessage NodeServer::ProcessMessage(const NetworkMessage& message) {
-        std::cout << "Node " << node_config.node_id << " processing message type: " 
-                  << message.header.message_type << std::endl;
+        LOG_INFOF("NodeTcpServer", "Node %s processing message type: %d", 
+            node_config.node_id.c_str(), message.header.message_type);
 
         try {
             // 1. NetworkMessage → Proto 변환
             std::unique_ptr<CoordinatorNodeMessage> proto_request = NetworkMessageToProto(message);
             if (!proto_request) {
-                std::cerr << "Failed to parse protobuf message" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Failed to parse protobuf message");
                 return CreateErrorResponse(message.header.message_type, "Invalid protobuf format");
             }
 
@@ -144,7 +152,7 @@ namespace mpc_engine::node
                 handlers::NodeMessageRouter::Instance().ProcessMessage(proto_request.get());
 
             if (!proto_response) {
-                std::cerr << "No response from message router" << std::endl;
+                LOG_ERROR("NodeTcpServer", "No response from message router");
                 return CreateErrorResponse(message.header.message_type, "No response generated");
             }
 
@@ -152,13 +160,14 @@ namespace mpc_engine::node
             return ProtoToNetworkMessage(proto_response.get());
 
         } catch (const std::exception& e) {
-            std::cerr << "Exception in ProcessMessage: " << e.what() << std::endl;
+            LOG_ERRORF("NodeTcpServer", "Exception in ProcessMessage: %s", e.what());
             return CreateErrorResponse(message.header.message_type, "Processing failed: " + std::string(e.what()));
         }
     }
 
     void NodeServer::SetupCallbacks() {
         if (!tcp_server) {
+            LOG_ERROR("NodeTcpServer", "TCP server is not initialized");
             return;
         }
 
@@ -174,7 +183,7 @@ namespace mpc_engine::node
             return ProcessMessage(msg);
         });
         
-        std::cout << "Node server callbacks configured" << std::endl;
+        LOG_INFO("NodeTcpServer", "Node server callbacks configured");
     }
 
     // NetworkMessage → Proto 변환
@@ -184,7 +193,7 @@ namespace mpc_engine::node
         // body에서 Proto 메시지 역직렬화
         if (!message.body.empty()) {
             if (!proto_msg->ParseFromArray(message.body.data(), message.body.size())) {
-                std::cerr << "[NodeServer] Failed to parse protobuf from NetworkMessage" << std::endl;
+                LOG_ERROR("NodeTcpServer", "Failed to parse protobuf from NetworkMessage");
                 return nullptr;
             }
         }
@@ -195,12 +204,14 @@ namespace mpc_engine::node
     // Proto → NetworkMessage 변환
     NetworkMessage NodeServer::ProtoToNetworkMessage(const CoordinatorNodeMessage* proto_msg) {
         if (!proto_msg) {
+            LOG_ERROR("NodeTcpServer", "Proto message is null");
             throw std::invalid_argument("Proto message is null");
         }
         
         // Proto 메시지 직렬화
         std::string serialized;
         if (!proto_msg->SerializeToString(&serialized)) {
+            LOG_ERROR("NodeTcpServer", "Failed to serialize protobuf message");
             throw std::runtime_error("Failed to serialize protobuf message");
         }
         

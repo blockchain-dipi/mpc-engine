@@ -5,7 +5,7 @@
 #include "common/kms/include/KMSManager.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 #include <signal.h>
 #include <atomic>
 #include <condition_variable>
@@ -25,7 +25,7 @@ static std::condition_variable g_shutdown_cv;
 static std::mutex g_shutdown_mutex;
 
 void SignalHandler(int signal) {
-    std::cout << "\nReceived signal " << signal << ", shutting down gracefully..." << std::endl;
+    LOG_INFOF("NodeTcpServer", "Received signal %d, shutting down gracefully...", signal);
     
     if (g_node_server) {
         g_node_server->Stop();
@@ -39,22 +39,22 @@ void SignalHandler(int signal) {
 }
 
 void PrintUsage(const char* program_name) {
-    std::cout << "Usage: " << program_name << " [--env ENVIRONMENT] --id NODE_ID" << std::endl;
-    std::cout << std::endl;
-    std::cout << "Options:" << std::endl;
-    std::cout << "  --env ENV      Environment (local, dev, qa, production). Default: local" << std::endl;
-    std::cout << "  --id NODE_ID   Node identifier (must match NODE_IDS in config)" << std::endl;
-    std::cout << std::endl;
-    std::cout << "Examples:" << std::endl;
-    std::cout << "  " << program_name << " --id node_1" << std::endl;
-    std::cout << "  " << program_name << " --env production --id node_aws_1" << std::endl;
+    LOG_INFOF("NodeTcpServer", "Usage: %s [--env ENVIRONMENT] --id NODE_ID", program_name);
+    LOG_INFO("NodeTcpServer", "");
+    LOG_INFOF("NodeTcpServer", "Usage: %s [--env ENVIRONMENT] --id NODE_ID", program_name);
+    LOG_INFO("NodeTcpServer", "");
+    LOG_INFO("NodeTcpServer", "Options:");
+    LOG_INFO("NodeTcpServer", "  --env ENV      Environment (local, dev, qa, production). Default: local");
+    LOG_INFO("NodeTcpServer", "  --id NODE_ID   Node identifier (must match NODE_IDS in config)");
+    LOG_INFO("NodeTcpServer", "");
+    LOG_INFO("NodeTcpServer", "Examples:");
+    LOG_INFOF("NodeTcpServer", "  %s --id node_1", program_name);
+    LOG_INFOF("NodeTcpServer", "  %s --env production --id node_aws_1", program_name);
 }
 
 int main(int argc, char* argv[]) {
-    std::cout << "=== MPC Engine Node Server ===" << std::endl;
-    std::cout << "Version: 1.0.0" << std::endl;
-    std::cout << "Build: " << __DATE__ << " " << __TIME__ << std::endl;
-    std::cout << std::endl;
+    LOG_INFO("NodeTcpServer", "=== MPC Engine Node Server ===");
+    LOG_INFOF("NodeTcpServer", "Build: %s %s", __DATE__, __TIME__);
 
     // 명령행 인자 파싱
     std::string env_type = "local";
@@ -74,19 +74,18 @@ int main(int argc, char* argv[]) {
     }
 
     if (node_id.empty()) {
-        std::cerr << "Error: --id is required" << std::endl;
+        LOG_ERROR("NodeTcpServer", "Error: --id is required");
         PrintUsage(argv[0]);
         return 1;
     }
 
-    std::cout << "Configuration:" << std::endl;
-    std::cout << "  Environment: " << env_type << std::endl;
-    std::cout << "  Node ID: " << node_id << std::endl;
-    std::cout << std::endl;
+    LOG_INFO("NodeTcpServer", "Configuration:");
+    LOG_INFOF("NodeTcpServer", "  Environment: %s", env_type.c_str());
+    LOG_INFOF("NodeTcpServer", "  Node ID: %s", node_id.c_str());
 
     // 환경 설정 로드
     if (!EnvManager::Instance().Initialize(env_type)) {
-        std::cerr << "Failed to load environment: " << env_type << std::endl;
+        LOG_ERRORF("NodeTcpServer", "Failed to load environment: %s", env_type.c_str());
         return 1;
     }
 
@@ -127,32 +126,32 @@ int main(int argc, char* argv[]) {
         }
 
         if (!found) {
-            std::cerr << "Error: Node ID '" << node_id << "' not found in NODE_IDS" << std::endl;
-            std::cerr << "\nAvailable Node IDs:" << std::endl;
+            LOG_ERRORF("NodeTcpServer", "Error: Node ID '%s' not found in NODE_IDS", node_id.c_str());
+            LOG_INFO("NodeTcpServer", "Available Node IDs:");
             for (const auto& id : node_ids) {
-                std::cerr << "  - " << id << std::endl;
+                LOG_INFOF("NodeTcpServer", "  - %s", id.c_str());
             }
             return 1;
         }
 
-        std::cout << "Node configuration:" << std::endl;
-        std::cout << "  Node ID: " << node_id << std::endl;
-        std::cout << "  Platform: " << PlatformTypeToString(config.platform_type) << std::endl;
-        std::cout << "  Bind Address: " << config.bind_address << ":" << config.bind_port << std::endl;
-        std::cout << std::endl;
+        LOG_INFO("NodeTcpServer", "Node configuration:");
+        LOG_INFOF("NodeTcpServer", "  Node ID: %s", node_id.c_str());
+        LOG_INFOF("NodeTcpServer", "  Platform: %s", PlatformTypeToString(config.platform_type).c_str());
+        LOG_INFOF("NodeTcpServer", "  Bind Address: %s:%d", config.bind_address.c_str(), config.bind_port);
+        LOG_INFO("NodeTcpServer", "");
 
         // readonly resource loader 초기화
         ReadOnlyResLoaderManager::Instance().Initialize(config.platform_type);
         
         // KMS 초기화
-        std::cout << "=== KMS Initialization ===" << std::endl;
+        LOG_INFO("NodeTcpServer", "=== KMS Initialization ===");
 
         std::string kms_config_path;
         if (config.platform_type == PlatformType::LOCAL) {
             kms_config_path = Config::GetString("NODE_LOCAL_KMS_PATH");
         }
         KMSManager::InitializeLocal(config.platform_type, kms_config_path); // 기본값 설정
-        std::cout << "✓ KMS initialized successfully" << std::endl;
+        LOG_INFO("NodeTcpServer", "✓ KMS initialized successfully");
 
         // NodeServer 생성
         NodeServer node_server(config);
@@ -164,7 +163,7 @@ int main(int argc, char* argv[]) {
 
         // 서버 초기화
         if (!node_server.Initialize()) {
-            std::cerr << "Failed to initialize node server" << std::endl;
+            LOG_ERROR("NodeTcpServer", "Failed to initialize node server");
             return 1;
         }
 
@@ -180,24 +179,24 @@ int main(int argc, char* argv[]) {
 
         // 서버 시작
         if (!node_server.Start()) {
-            std::cerr << "Failed to start node server" << std::endl;
+            LOG_ERROR("NodeTcpServer", "Failed to start node server");
             return 1;
         }
 
         // 시작 정보 출력
-        std::cout << "========================================" << std::endl;
-        std::cout << "  Node Server Running" << std::endl;
-        std::cout << "========================================" << std::endl;
-        std::cout << "  Node ID: " << node_server.GetNodeId() << std::endl;
-        std::cout << "  Platform: " << PlatformTypeToString(node_server.GetPlatformType()) << std::endl;
-        std::cout << "  Listening: " << config.bind_address << ":" << config.bind_port << std::endl;
-        std::cout << "  Trusted Coordinator: " << Config::GetString("TRUSTED_COORDINATOR_IP") << std::endl;
+        LOG_INFO("NodeTcpServer", "========================================");
+        LOG_INFO("NodeTcpServer", "  Node Server Running");
+        LOG_INFO("NodeTcpServer", "========================================");
+        LOG_INFOF("NodeTcpServer", "  Node ID: %s", node_server.GetNodeId().c_str());
+        LOG_INFOF("NodeTcpServer", "  Platform: %s", PlatformTypeToString(node_server.GetPlatformType()).c_str());
+        LOG_INFOF("NodeTcpServer", "  Listening: %s:%d", config.bind_address.c_str(), config.bind_port);
+        LOG_INFOF("NodeTcpServer", "  Trusted Coordinator: %s", Config::GetString("TRUSTED_COORDINATOR_IP").c_str());
         if (tcp_server) {
-            std::cout << "  Kernel Firewall: " << (tcp_server->IsKernelFirewallEnabled() ? "ENABLED" : "DISABLED") << std::endl;
+            LOG_INFOF("NodeTcpServer", "  Kernel Firewall: %s", (tcp_server->IsKernelFirewallEnabled() ? "ENABLED" : "DISABLED"));
         }
-        std::cout << "========================================" << std::endl;
-        std::cout << "Server is running. Press Ctrl+C to stop." << std::endl;
-        std::cout << std::endl;
+        LOG_INFO("NodeTcpServer", "========================================");
+        LOG_INFO("NodeTcpServer", "Server is running. Press Ctrl+C to stop.");
+        LOG_INFO("NodeTcpServer", "");
 
         // 메인 루프
         {
@@ -208,17 +207,17 @@ int main(int argc, char* argv[]) {
         }
 
     } catch (const ConfigMissingException& e) {
-        std::cerr << "Configuration error: " << e.what() << std::endl;
-        std::cerr << "\nPlease check your env/.env." << env_type << " file." << std::endl;
+        LOG_ERRORF("NodeTcpServer", "Configuration error: %s", e.what());
+        LOG_ERRORF("NodeTcpServer", "Please check your env/.env.%s file.", env_type.c_str());
         return 1;
     } catch (const KMSException& e) {
-        std::cerr << "KMS error: " << e.what() << std::endl;
+        LOG_ERRORF("NodeTcpServer", "KMS error: %s", e.what());
         return 1;
     } catch (const std::exception& e) {
-        std::cerr << "Node server error: " << e.what() << std::endl;
+        LOG_ERRORF("NodeTcpServer", "Node server error: %s", e.what());
         return 1;
     }
 
-    std::cout << "Node server shutdown complete." << std::endl;
+    LOG_INFO("NodeTcpServer", "Node server shutdown complete.");
     return 0;
 }

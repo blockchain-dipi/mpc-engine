@@ -5,7 +5,7 @@
 #include "common/kms/include/KMSException.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
-#include <iostream>
+#include "common/utils/logger/Logger.hpp"
 #include <signal.h>
 #include <atomic>
 #include <condition_variable>
@@ -27,7 +27,7 @@ static std::mutex g_shutdown_mutex;
 
 void SignalHandler(int signal) 
 {
-    std::cout << "\nReceived signal " << signal << ", shutting down gracefully..." << std::endl;
+    LOG_INFOF("CoordinatorServer", "Received signal %d, shutting down gracefully...", signal);
     
     if (g_coordinator) {
         g_coordinator->Stop();
@@ -42,22 +42,20 @@ void SignalHandler(int signal)
 
 void PrintUsage(const char* program_name) 
 {
-    std::cout << "Usage: " << program_name << " [ENVIRONMENT]" << std::endl;
-    std::cout << "       " << program_name << " --env [ENVIRONMENT]" << std::endl;
-    std::cout << std::endl;
-    std::cout << "Environment:" << std::endl;
-    std::cout << "  local       Local development environment (default)" << std::endl;
-    std::cout << "  dev         Development environment" << std::endl;
-    std::cout << "  qa          QA environment" << std::endl;
-    std::cout << "  production  Production environment" << std::endl;
+    LOG_INFOF("CoordinatorServer", "Usage: %s [ENVIRONMENT]", program_name);
+    LOG_INFOF("CoordinatorServer", "       %s --env [ENVIRONMENT]", program_name);
+    LOG_INFO("CoordinatorServer", "");
+    LOG_INFOF("CoordinatorServer", "Environment:");
+    LOG_INFOF("CoordinatorServer", "  local       Local development environment (default)");
+    LOG_INFOF("CoordinatorServer", "  dev         Development environment");
+    LOG_INFOF("CoordinatorServer", "  qa          QA environment");
+    LOG_INFOF("CoordinatorServer", "  production  Production environment");
 }
 
 int main(int argc, char* argv[]) 
 {
-    std::cout << "=== MPC Engine Coordinator Server ===" << std::endl;
-    std::cout << "Version: 1.0.0" << std::endl;
-    std::cout << "Build: " << __DATE__ << " " << __TIME__ << std::endl;
-    std::cout << std::endl;
+    LOG_INFO("CoordinatorServer", "=== MPC Engine Coordinator Server ===");
+    LOG_INFOF("CoordinatorServer", "Build: %s %s", __DATE__, __TIME__);
     
     // 명령행 인자 파싱
     std::string env_type = "local";
@@ -75,12 +73,12 @@ int main(int argc, char* argv[])
             break;
         }
     }
-    
-    std::cout << "Loading environment: " << env_type << std::endl;
-    
+
+    LOG_INFOF("CoordinatorServer", "Loading environment: %s", env_type.c_str());
+
     // 환경 설정 로드
     if (!EnvManager::Instance().Initialize(env_type)) {
-        std::cerr << "Failed to load environment: " << env_type << std::endl;
+        LOG_ERRORF("CoordinatorServer", "Failed to load environment: %s", env_type.c_str());
         return 1;
     }
     
@@ -101,50 +99,50 @@ int main(int argc, char* argv[])
             "TLS_CERT_COORDINATOR_WALLET",
             "TLS_KMS_COORDINATOR_WALLET_KEY_ID"
         };
-        
-        std::cout << "Validating required configuration..." << std::endl;
+
+        LOG_INFO("CoordinatorServer", "Validating required configuration...");
         Config::ValidateRequired(required_keys);
-        std::cout << "✓ All required configurations present" << std::endl;
-        
+        LOG_INFO("CoordinatorServer", "✓ All required configurations present");
+
     } catch (const std::exception& e) {
-        std::cerr << "✗ Configuration error: " << e.what() << std::endl;
-        std::cerr << "\nPlease check your env/.env." << env_type << " file." << std::endl;
+        LOG_ERRORF("CoordinatorServer", "✗ Configuration error: %s", e.what());
+        LOG_ERRORF("CoordinatorServer", "Please check your env/.env.%s file.", env_type.c_str());
         return 1;
     }
     
     try {
         std::string platform_type = Config::GetString("COORDINATOR_PLATFORM");
         PlatformType platform = PlatformTypeFromString(platform_type);
-        std::cout << "\n=== Initialization ===" << std::endl;
-        std::cout << "Coordinator Platform: " << platform_type << std::endl;
+        LOG_INFOF("CoordinatorServer", "=== Initialization ===");
+        LOG_INFOF("CoordinatorServer", "Coordinator Platform: %s", platform_type.c_str());
 
         if (platform == PlatformType::UNKNOWN) {
-            std::cerr << "✗ Unsupported platform type: " << platform_type << std::endl;
+            LOG_ERRORF("CoordinatorServer", "✗ Unsupported platform type: %s", platform_type.c_str());
             return 1;
         }
 
         // ========================================
         // 1. 리소스 로더 초기화
         // ========================================
-        std::cout << "\n=== Resource Loader Initialization ===" << std::endl;
+        LOG_INFO("CoordinatorServer", "=== Resource Loader Initialization ===");
         ReadOnlyResLoaderManager::Instance().Initialize(platform);
-        std::cout << "✓ Resource loader initialized" << std::endl;
+        LOG_INFO("CoordinatorServer", "✓ Resource loader initialized");
 
         // ========================================
         // 2. KMS 초기화
         // ========================================
-        std::cout << "\n=== KMS Initialization ===" << std::endl;
+        LOG_INFO("CoordinatorServer", "=== KMS Initialization ===");
         std::string kms_config_path;
         if (platform == PlatformType::LOCAL) {
             kms_config_path = Config::GetString("COORDINATOR_LOCAL_KMS_PATH");
         }
         KMSManager::InitializeLocal(platform, kms_config_path);
-        std::cout << "✓ KMS initialized successfully" << std::endl;
+        LOG_INFO("CoordinatorServer", "✓ KMS initialized successfully");
         
         // ========================================
         // 3. Coordinator Server 초기화
         // ========================================
-        std::cout << "\n=== Coordinator Server Initialization ===" << std::endl;
+        LOG_INFO("CoordinatorServer", "=== Coordinator Server Initialization ===");
         
         CoordinatorServer& coordinator = CoordinatorServer::Instance();
         g_coordinator = &coordinator;
@@ -154,37 +152,37 @@ int main(int argc, char* argv[])
         signal(SIGTERM, SignalHandler);
         
         if (!coordinator.Initialize()) {
-            std::cerr << "Failed to initialize coordinator" << std::endl;
+            LOG_ERROR("CoordinatorServer", "Failed to initialize coordinator");
             return 1;
         }
         
         if (!coordinator.Start()) {
-            std::cerr << "Failed to start coordinator" << std::endl;
+            LOG_ERROR("CoordinatorServer", "Failed to start coordinator");
             return 1;
         }
-        std::cout << "✓ Coordinator server started" << std::endl;
+        LOG_INFO("CoordinatorServer", "✓ Coordinator server started");
         
         // ========================================
         // 4. HTTPS Server 초기화 및 시작
         // ========================================
-        std::cout << "\n=== HTTPS Server Initialization ===" << std::endl;
-        
+        LOG_INFO("CoordinatorServer", "=== HTTPS Server Initialization ===");
+
         if (!coordinator.InitializeHttpsServer()) {
-            std::cerr << "✗ Failed to initialize HTTPS server" << std::endl;
+            LOG_ERROR("CoordinatorServer", "✗ Failed to initialize HTTPS server");
             return 1;
         }
         
         if (!coordinator.StartHttpsServer()) {
-            std::cerr << "✗ Failed to start HTTPS server" << std::endl;
+            LOG_ERROR("CoordinatorServer", "✗ Failed to start HTTPS server");
             return 1;
         }
         
-        std::cout << "✓ HTTPS server started" << std::endl;
+        LOG_INFO("CoordinatorServer", "✓ HTTPS server started");
         
         // ========================================
         // 5. Node 설정 로드 및 등록
         // ========================================
-        std::cout << "\n=== Node Configuration ===" << std::endl;
+        LOG_INFO("CoordinatorServer", "=== Node Configuration ===");
         
         std::vector<std::pair<std::string, uint16_t>> node_endpoints = Config::GetNodeEndpoints("NODE_HOSTS");
         std::vector<std::string> node_ids = Config::GetStringArray("NODE_IDS");
@@ -194,56 +192,56 @@ int main(int argc, char* argv[])
         uint32_t total_shards = Config::GetUInt32("MPC_TOTAL_SHARDS");
         
         if (node_endpoints.empty()) {
-            std::cerr << "No node endpoints configured" << std::endl;
+            LOG_ERROR("CoordinatorServer", "No node endpoints configured");
             return 1;
         }
-        
-        std::cout << "  Environment: " << env_type << std::endl;
-        std::cout << "  Platform: " << platform_type << std::endl;
-        std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
-        std::cout << "  Target Nodes:" << std::endl;
-        
+
+        LOG_INFOF("CoordinatorServer", "  Environment: %s", env_type.c_str());
+        LOG_INFOF("CoordinatorServer", "  Platform: %s", platform_type.c_str());
+        LOG_INFOF("CoordinatorServer", "  MPC Threshold: %d/%d", threshold, total_shards);
+        LOG_INFO("CoordinatorServer", "  Target Nodes:");
+
         for (size_t i = 0; i < node_endpoints.size(); ++i) {
             const auto& endpoint = node_endpoints[i];
             std::string node_id = (i < node_ids.size()) ? node_ids[i] : "node_" + std::to_string(i + 1);
             std::string node_platform = (i < platforms.size()) ? platforms[i] : "LOCAL";
             uint32_t shard_index = (i < shard_indices.size()) ? shard_indices[i] : i;
             
-            std::cout << "    - " << node_id << " (" << node_platform << ") at " 
-                      << endpoint.first << ":" << endpoint.second 
-                      << " [shard " << shard_index << "]" << std::endl;
+            LOG_INFOF("CoordinatorServer", "    - %s (%s) at %s:%d [shard %d]", 
+                node_id.c_str(), node_platform.c_str(), 
+                endpoint.first.c_str(), endpoint.second, shard_index);
 
             PlatformType node_platform_type = PlatformTypeFromString(node_platform);
 
             if (!coordinator.RegisterNode(node_id, node_platform_type, endpoint.first, endpoint.second, shard_index)) {
-                std::cerr << "Failed to register node: " << node_id << std::endl;
+                LOG_ERRORF("CoordinatorServer", "Failed to register node: %s", node_id.c_str());
                 return 1;
             }
         }
-        std::cout << "✓ All nodes registered" << std::endl;
-        
+        LOG_INFO("CoordinatorServer", "✓ All nodes registered");
+        LOG_INFOF("CoordinatorServer", "Total nodes registered: %d", node_endpoints.size());
+
         // ========================================
         // 6. Node 연결
         // ========================================
-        std::cout << "\n=== Node Connection ===" << std::endl;
-        std::cout << "Attempting to connect to registered nodes..." << std::endl;
-        
+        LOG_INFO("CoordinatorServer", "=== Node Connection ===");
+        LOG_INFO("CoordinatorServer", "Attempting to connect to registered nodes...");
+
         for (const auto& node_id : node_ids) {
             if (coordinator.ConnectToNode(node_id)) {
-                std::cout << "  ✓ Connected to " << node_id << std::endl;
+                LOG_INFOF("CoordinatorServer", "  ✓ Connected to %s", node_id.c_str());
             } else {
-                std::cout << "  ✗ Failed to connect to " << node_id 
-                          << " (Node may not be running yet)" << std::endl;
+                LOG_ERRORF("CoordinatorServer", "  ✗ Failed to connect to %s", node_id.c_str());
             }
         }
         
         size_t connected_count = coordinator.GetConnectedNodeCount();
-        std::cout << "\nConnected nodes: " << connected_count << "/" << node_ids.size() << std::endl;
-        
+        LOG_INFOF("CoordinatorServer", "Connected nodes: %d/%d", connected_count, node_ids.size());
+
         if (connected_count == 0) {
-            std::cout << "\nWarning: No nodes connected" << std::endl;
-            std::cout << "  Coordinator is running, but cannot process MPC operations" << std::endl;
-            std::cout << "  Start Node servers and they will auto-connect" << std::endl;
+            LOG_WARN("CoordinatorServer", "No nodes connected");
+            LOG_WARN("CoordinatorServer", "  Coordinator is running, but cannot process MPC operations");
+            LOG_WARN("CoordinatorServer", "  Start Node servers and they will auto-connect");
         }
         
         // ========================================
@@ -252,18 +250,18 @@ int main(int argc, char* argv[])
         std::string https_bind = Config::GetString("COORDINATOR_HTTPS_BIND");
         uint16_t https_port = Config::GetUInt16("COORDINATOR_HTTPS_PORT");
         
-        std::cout << "\n========================================" << std::endl;
-        std::cout << "  Coordinator Server Running" << std::endl;
-        std::cout << "========================================" << std::endl;
-        std::cout << "  Environment: " << env_type << std::endl;
-        std::cout << "  Platform: " << platform_type << std::endl;
-        std::cout << "  MPC Threshold: " << threshold << "/" << total_shards << std::endl;
-        std::cout << "  Registered Nodes: " << node_ids.size() << std::endl;
-        std::cout << "  Connected Nodes: " << connected_count << std::endl;
-        std::cout << "  HTTPS Server: " << (coordinator.IsHttpsServerRunning() ? "✓ Running" : "✗ Stopped") << std::endl;
-        std::cout << "  HTTPS Endpoint: " << https_bind << ":" << https_port << std::endl;
-        std::cout << "========================================" << std::endl;
-        std::cout << "\nPress Ctrl+C to shutdown gracefully..." << std::endl;
+        LOG_INFO("CoordinatorServer", "========================================");
+        LOG_INFO("CoordinatorServer", "  Coordinator Server Running");
+        LOG_INFO("CoordinatorServer", "========================================");
+        LOG_INFOF("CoordinatorServer", "  Environment: %s", env_type.c_str());
+        LOG_INFOF("CoordinatorServer", "  Platform: %s", platform_type.c_str());
+        LOG_INFOF("CoordinatorServer", "  MPC Threshold: %d/%d", threshold, total_shards);
+        LOG_INFOF("CoordinatorServer", "  Registered Nodes: %d", node_ids.size());
+        LOG_INFOF("CoordinatorServer", "  Connected Nodes: %d", connected_count);
+        LOG_INFOF("CoordinatorServer", "  HTTPS Server: %s", (coordinator.IsHttpsServerRunning() ? "✓ Running" : "✗ Stopped"));
+        LOG_INFOF("CoordinatorServer", "  HTTPS Endpoint: %s:%d", https_bind.c_str(), https_port);
+        LOG_INFO("CoordinatorServer", "========================================");
+        LOG_INFO("CoordinatorServer", "\nPress Ctrl+C to shutdown gracefully...");
         
         // ========================================
         // 8. 메인 루프
@@ -273,21 +271,21 @@ int main(int argc, char* argv[])
             g_shutdown_cv.wait(lock, [] { return g_shutdown_requested.load(); });
         }
         
-        std::cout << "\nShutdown initiated..." << std::endl;
+        LOG_INFO("CoordinatorServer", "\nShutdown initiated...");
         coordinator.Stop();
-        
-        std::cout << "Coordinator server stopped cleanly" << std::endl;
+
+        LOG_INFO("CoordinatorServer", "Coordinator server stopped cleanly");
         return 0;
         
     } catch (const ConfigMissingException& e) {
-        std::cerr << "\n✗ Configuration Error: " << e.what() << std::endl;
-        std::cerr << "Check your env/.env." << env_type << " file" << std::endl;
+        LOG_ERRORF("CoordinatorServer", "✗ Configuration Error: %s", e.what());
+        LOG_ERRORF("CoordinatorServer", "Please check your env/.env.%s file.", env_type.c_str());
         return 1;
     } catch (const KMSException& e) {
-        std::cerr << "\n✗ KMS Error: " << e.what() << std::endl;
+        LOG_ERRORF("CoordinatorServer", "✗ KMS Error: %s", e.what());
         return 1;
     } catch (const std::exception& e) {
-        std::cerr << "\n✗ Fatal Error: " << e.what() << std::endl;
+        LOG_ERRORF("CoordinatorServer", "✗ Fatal Error: %s", e.what());
         return 1;
     }
 }
