@@ -26,7 +26,6 @@ namespace mpc_engine::env
         file.close();
 
         is_loaded = true;
-        std::cout << "Loaded " << config_map.size() << " configuration entries from " << file_path << std::endl;
         return true;
     }
 

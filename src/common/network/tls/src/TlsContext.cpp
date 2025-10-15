@@ -123,9 +123,6 @@ namespace mpc_engine::network::tls
         }
 
         is_initialized = true;
-        std::cout << "[TLS] Context initialized successfully ("
-                  << (config.mode == TlsMode::CLIENT ? "CLIENT" : "SERVER")
-                  << ")" << std::endl;
         return true;
     }
 
@@ -166,7 +163,6 @@ namespace mpc_engine::network::tls
         }
 
         has_certificate = true;
-        std::cout << "[TLS] Certificate and private key loaded successfully" << std::endl;
         return true;
     }
 
@@ -187,7 +183,6 @@ namespace mpc_engine::network::tls
         }
 
         has_ca = true;
-        std::cout << "[TLS] CA certificate loaded successfully" << std::endl;
         return true;
     }
 
@@ -206,7 +201,6 @@ namespace mpc_engine::network::tls
         }
 
         has_ca = true;
-        std::cout << "[TLS] CA chain loaded (" << ca_chain.size() << " certificates)" << std::endl;
         return true;
     }
 
@@ -250,15 +244,12 @@ namespace mpc_engine::network::tls
         SSL_library_init();
         SSL_load_error_strings();
         OpenSSL_add_all_algorithms();
-        std::cout << "[TLS] OpenSSL initialized (version: " 
-                  << OpenSSL_version(OPENSSL_VERSION) << ")" << std::endl;
     }
 
     void TlsContext::GlobalCleanup() 
     {
         EVP_cleanup();
         ERR_free_strings();
-        std::cout << "[TLS] OpenSSL cleanup complete" << std::endl;
     }
 
     bool TlsContext::InitializeClientContext() 
@@ -271,8 +262,6 @@ namespace mpc_engine::network::tls
                       << GetLastError() << std::endl;
             return false;
         }
-
-        std::cout << "[TLS] Client context created" << std::endl;
         return true;
     }
 
@@ -286,8 +275,6 @@ namespace mpc_engine::network::tls
                       << GetLastError() << std::endl;
             return false;
         }
-
-        std::cout << "[TLS] Server context created" << std::endl;
         return true;
     }
 
@@ -316,8 +303,6 @@ namespace mpc_engine::network::tls
                       << GetLastError() << std::endl;
             return false;
         }
-
-        std::cout << "[TLS] Certificate loaded from memory" << std::endl;
         return true;
     }
 
@@ -346,8 +331,6 @@ namespace mpc_engine::network::tls
                       << GetLastError() << std::endl;
             return false;
         }
-
-        std::cout << "[TLS] Private key loaded from memory" << std::endl;
         return true;
     }
 
@@ -382,8 +365,6 @@ namespace mpc_engine::network::tls
             std::cerr << "[TLS] No CA certificates loaded" << std::endl;
             return false;
         }
-
-        std::cout << "[TLS] Loaded " << count << " CA certificate(s) from memory" << std::endl;
         return true;
     }
 
@@ -420,11 +401,7 @@ namespace mpc_engine::network::tls
                       << GetLastError() << std::endl;
             return false;
         }
-
-        std::cout << "[TLS] Min TLS version set to " 
-                  << (config.min_version == TlsVersion::TLS_1_3 ? "1.3" : "1.2") 
-                  << std::endl;
-        return true;
+       return true;
     }
 
     bool TlsContext::ConfigureVerification() 
@@ -435,18 +412,12 @@ namespace mpc_engine::network::tls
 
         SSL_CTX_set_verify(ctx, mode, VerifyCallback);
         SSL_CTX_set_verify_depth(ctx, config.verify_depth);
-
-        std::cout << "[TLS] mTLS verification enabled (mode: " 
-                  << (config.mode == TlsMode::CLIENT ? "CLIENT" : "SERVER") 
-                  << ")" << std::endl;
-
         return true;
     }
 
     bool TlsContext::ConfigureSessionCache() 
     {
         SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_SERVER);
-        std::cout << "[TLS] Session cache enabled" << std::endl;
         return true;
     }
 

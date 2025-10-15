@@ -120,9 +120,6 @@ namespace mpc_engine::network::tls
         state = TlsConnectionState::CONNECTING;
         ClearError();
 
-        std::cout << "[TLS] Connection initialized (" 
-                  << (is_client_mode ? "CLIENT" : "SERVER") << ")" << std::endl;
-
         return true;
     }
 
@@ -149,13 +146,7 @@ namespace mpc_engine::network::tls
                 // 핸드셰이크 성공
                 state = TlsConnectionState::CONNECTED;
                 handshake_complete_time = utils::GetCurrentTimeMs();
-                ClearError();
-                
-                std::cout << "[TLS] Handshake completed successfully ("
-                          << GetHandshakeDuration() << "ms)" << std::endl;
-                std::cout << "[TLS] Protocol: " << GetProtocolVersion() << std::endl;
-                std::cout << "[TLS] Cipher: " << GetCipherInfo() << std::endl;
-                
+                ClearError();                
                 return true;
             }
 
@@ -342,8 +333,6 @@ namespace mpc_engine::network::tls
         // 소켓은 외부에서 관리하므로 닫지 않음
         socket_fd = INVALID_SOCKET_VALUE;
         state = TlsConnectionState::DISCONNECTED;
-
-        std::cout << "[TLS] Connection closed" << std::endl;
     }
 
     std::string TlsConnection::GetPeerCertificateInfo() const 

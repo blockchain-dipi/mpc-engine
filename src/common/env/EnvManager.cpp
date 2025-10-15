@@ -41,7 +41,6 @@ namespace mpc_engine::env
         }
 
         is_initialized = true;
-        std::cout << "✓ EnvManager initialized with environment: " << env_type << std::endl;
         return true;
     }
 
@@ -137,7 +136,6 @@ namespace mpc_engine::env
             return false;
         }
 
-        std::cout << "✓ Configuration reloaded successfully" << std::endl;
         return true;
     }
 

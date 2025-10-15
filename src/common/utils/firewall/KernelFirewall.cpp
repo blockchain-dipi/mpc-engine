@@ -27,8 +27,6 @@ namespace mpc_engine::utils
             std::cout << "[FIREWALL][DRY-RUN] " << command << std::endl;
             return true;
         }
-
-        std::cout << "[FIREWALL] Executing: " << command << std::endl;
         
         // popen으로 명령 실행 및 출력 캡처
         std::array<char, 128> buffer;
@@ -96,10 +94,6 @@ namespace mpc_engine::utils
             return false;
         }
 
-        std::cout << "[FIREWALL] Configuring kernel-level firewall" << std::endl;
-        std::cout << "[FIREWALL]   Port: " << port << std::endl;
-        std::cout << "[FIREWALL]   Trusted IP: " << trusted_coordinator_ip << std::endl;
-
         // 3. 기존 규칙 제거 (멱등성 보장)
         RemoveNodeFirewall(port, dry_run);
 
@@ -122,11 +116,6 @@ namespace mpc_engine::utils
             RemoveNodeFirewall(port, dry_run);
             return false;
         }
-
-        std::cout << "[FIREWALL] ✓ Kernel firewall configured successfully" << std::endl;
-        std::cout << "[FIREWALL] ✓ Only " << trusted_coordinator_ip 
-                  << " can establish TCP connections to port " << port << std::endl;
-        
         return true;
     }
 
@@ -136,8 +125,6 @@ namespace mpc_engine::utils
             std::cerr << "[FIREWALL] Root privilege required" << std::endl;
             return false;
         }
-
-        std::cout << "[FIREWALL] Removing existing firewall rules for port " << port << std::endl;
 
         std::stringstream ss;
         ss << "iptables -D INPUT -p tcp --syn --dport " << port << " -j DROP 2>/dev/null";
@@ -156,8 +143,6 @@ namespace mpc_engine::utils
                 break;
             }
         }
-
-        std::cout << "[FIREWALL] ✓ Firewall rules removed" << std::endl;
         return true;
     }
 

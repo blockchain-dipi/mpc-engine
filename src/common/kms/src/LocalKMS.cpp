@@ -9,7 +9,6 @@ namespace mpc_engine::kms
     LocalKMS::LocalKMS(const std::string& path) 
         : storage_path(path), is_initialized(false) 
     {
-        std::cout << "[LocalKMS] Initialized with storage path: " << storage_path << std::endl;
     }
 
     LocalKMS::~LocalKMS() 
@@ -30,12 +29,9 @@ namespace mpc_engine::kms
                     std::cerr << "[LocalKMS] Failed to create storage directory: " << storage_path << std::endl;
                     return false;
                 }
-                std::cout << "[LocalKMS] Created storage directory: \"" << fs::absolute(storage_path).string() << "\"" << std::endl;
             }
             
             is_initialized = true;
-            std::cout << "[LocalKMS] Successfully initialized" << std::endl;
-            std::cout << "[LocalKMS] Storage path: \"" << fs::absolute(storage_path).string() << "\"" << std::endl;
             return true;
             
         } catch (const fs::filesystem_error& e) {
