@@ -156,7 +156,7 @@ namespace mpc_engine::env
             "COORDINATOR_HOST", "COORDINATOR_PORT", "COORDINATOR_PLATFORM",
             "NODE_IDS", "NODE_HOSTS", "NODE_PLATFORMS",
             "MPC_THRESHOLD", "MPC_TOTAL_SHARDS",
-            "LOG_LEVEL", "CONNECTION_TIMEOUT_MS"
+            "COMPILE_LOG_LEVEL"
         };
 
         for (const auto& key : safe_keys) {

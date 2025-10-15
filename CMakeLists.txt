@@ -244,6 +244,22 @@ target_link_libraries(coordinator
     mpc_resource
 )
 
+# === 빌드 타입별 컴파일 레벨 설정 ===
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_definitions(COMPILE_LOG_LEVEL=3)  # ERROR, FATAL만
+    message(STATUS "🔒 Release: ERROR/FATAL only")
+    
+elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    add_compile_definitions(COMPILE_LOG_LEVEL=1)  # INFO 이상
+    message(STATUS "🔧 RelWithDebInfo: INFO and above")
+    
+elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(COMPILE_LOG_LEVEL=0)  # 모든 로그
+    message(STATUS "🐛 Debug: ALL logs")
+else()
+    add_compile_definitions(COMPILE_LOG_LEVEL=0)  # DEBUG 이상
+endif()
+
 # === 테스트 ===
 option(BUILD_TESTS "Build unit tests" OFF)
 if(BUILD_TESTS)
