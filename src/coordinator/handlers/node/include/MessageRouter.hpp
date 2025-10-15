@@ -1,10 +1,7 @@
 // src/coordinator/handlers/node/include/MessageRouter.hpp
 #pragma once
 #include "types/MessageTypes.hpp"
-#include "proto/coordinator_node/generated/common.pb.h"
 #include "proto/coordinator_node/generated/message.pb.h"
-#include <string>
-#include <cstdint>
 #include <functional>
 #include <memory>
 

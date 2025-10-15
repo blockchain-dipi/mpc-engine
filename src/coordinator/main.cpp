@@ -2,9 +2,7 @@
 #include "CoordinatorServer.hpp"
 #include "types/BasicTypes.hpp"
 #include "common/config/EnvManager.hpp"
-#include "common/utils/socket/SocketUtils.hpp"
 #include "common/kms/include/KMSException.hpp"
-#include "common/network/tls/include/TlsContext.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include <iostream>
@@ -12,13 +10,10 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <thread>
-#include <chrono>
 #include <vector>
 
 using namespace mpc_engine;
 using namespace mpc_engine::coordinator;
-using namespace mpc_engine::node;
 using namespace mpc_engine::env;
 using namespace mpc_engine::kms;
 using namespace mpc_engine::network::tls;

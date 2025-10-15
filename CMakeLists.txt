@@ -4,12 +4,14 @@ project(mpc-engine)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_options(-Wall -Wextra -pedantic -pthread)
 
 find_package(Protobuf REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json 3.2.0)
+find_package(Boost REQUIRED COMPONENTS system)
 
 if(NOT nlohmann_json_FOUND)
     include(FetchContent)
@@ -169,8 +171,7 @@ target_link_libraries(coordinator_node_network
 
 # === Coordinator Wallet Server (HTTPS) ===
 add_library(coordinator_wallet_server STATIC
-    src/coordinator/network/wallet_server/src/HttpParser.cpp
-    src/coordinator/network/wallet_server/src/WalletConnection.cpp
+    src/coordinator/network/wallet_server/src/HttpsSession.cpp
     src/coordinator/network/wallet_server/src/CoordinatorHttpsServer.cpp
 )
 
@@ -181,6 +182,7 @@ target_link_libraries(coordinator_wallet_server
     mpc_common
     mpc_kms
     mpc_resource
+    Boost::system
     Threads::Threads
     OpenSSL::SSL
     OpenSSL::Crypto

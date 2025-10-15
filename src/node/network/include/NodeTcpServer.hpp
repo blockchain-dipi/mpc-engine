@@ -3,10 +3,8 @@
 #include "types/BasicTypes.hpp"
 #include "common/utils/threading/ThreadPool.hpp"
 #include "common/utils/queue/ThreadSafeQueue.hpp"
-#include "common/network/tls/include/TlsConnection.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/network/framing/tcp.hpp"
-#include "types/MessageTypes.hpp"
 #include "NodeConnectionInfo.hpp"
 #include <functional>
 #include <thread>

@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include <cstring>
-#include <stdexcept>
 
 namespace mpc_engine::network::framing
 {

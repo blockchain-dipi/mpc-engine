@@ -477,7 +477,6 @@ namespace mpc_engine::coordinator
             config.bind_port = env.GetUInt16("COORDINATOR_HTTPS_PORT");
             config.max_connections = env.GetUInt32("COORDINATOR_HTTPS_MAX_CONNECTIONS");
             config.handler_threads = env.GetUInt32("COORDINATOR_HTTPS_HANDLER_THREADS");
-            config.idle_timeout_ms = env.GetUInt32("COORDINATOR_HTTPS_IDLE_TIMEOUT_MS");
             
             // TLS 설정 (TLS_CERT_PATH 기준 상대 경로)
             config.tls_cert_path = env.GetString("TLS_CERT_COORDINATOR_WALLET");
@@ -502,7 +501,6 @@ namespace mpc_engine::coordinator
             std::cout << "  Bind: " << config.bind_address << ":" << config.bind_port << std::endl;
             std::cout << "  Max Connections: " << config.max_connections << std::endl;
             std::cout << "  Handler Threads: " << config.handler_threads << std::endl;
-            std::cout << "  Idle Timeout: " << config.idle_timeout_ms << "ms" << std::endl;
 
             return true;
 

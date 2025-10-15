@@ -4,7 +4,6 @@
 #include "common/utils/queue/ThreadSafeQueue.hpp"
 #include <vector>
 #include <thread>
-#include <functional>
 #include <atomic>
 #include <memory>
 

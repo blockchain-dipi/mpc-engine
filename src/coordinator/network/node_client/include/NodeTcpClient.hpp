@@ -1,8 +1,8 @@
 // src/coordinator/network/node_client/include/NodeTcpClient.hpp
 #pragma once
 #include "NodeConnectionInfo.hpp"
-#include "types/MessageTypes.hpp"
 #include "proto/coordinator_node/generated/message.pb.h"
+#include "common/network/framing/tcp.hpp"
 #include "common/utils/queue/ThreadSafeQueue.hpp"
 #include "common/network/tls/include/TlsContext.hpp"
 #include "common/network/tls/include/TlsConnection.hpp"
@@ -17,8 +17,8 @@
 namespace mpc_engine::coordinator::network
 {
     using namespace mpc_engine::proto::coordinator_node;
-    using namespace mpc_engine::node;
     using namespace mpc_engine::network::tls;
+    using namespace mpc_engine::network::framing;
     
     using NodeConnectedCallback = std::function<void(const std::string& node_id)>;
     using NodeDisconnectedCallback = std::function<void(const std::string& node_id)>;

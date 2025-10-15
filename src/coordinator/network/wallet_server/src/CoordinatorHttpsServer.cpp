@@ -1,30 +1,27 @@
 // src/coordinator/network/wallet_server/src/CoordinatorHttpsServer.cpp
 #include "coordinator/network/wallet_server/include/CoordinatorHttpsServer.hpp"
-#include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
-#include "common/utils/socket/SocketUtils.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include "common/config/EnvManager.hpp"
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
+#include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include <iostream>
-#include <chrono>
+#include <thread>
 
 namespace mpc_engine::coordinator::network::wallet_server
 {
     using namespace mpc_engine::kms;
     using namespace mpc_engine::resource;
+    using namespace mpc_engine::coordinator::handlers::wallet;
 
     CoordinatorHttpsServer::CoordinatorHttpsServer(const HttpsServerConfig& cfg)
-        : config(cfg)
+        : config_(cfg)
+        , io_context_()
     {
-        if (config.handler_threads == 0) {
+        if (config_.handler_threads == 0) {
             throw std::invalid_argument("handler_threads must be at least 1");
         }
 
-        if (config.max_connections == 0) {
+        if (config_.max_connections == 0) {
             throw std::invalid_argument("max_connections must be at least 1");
         }
     }
@@ -36,15 +33,15 @@ namespace mpc_engine::coordinator::network::wallet_server
 
     bool CoordinatorHttpsServer::Initialize() 
     {
-        if (initialized.load()) {
+        if (initialized_.load()) {
             std::cout << "[CoordinatorHttpsServer] Already initialized" << std::endl;
             return true;
         }
 
         std::cout << "[CoordinatorHttpsServer] Initializing..." << std::endl;
 
-        // Step 1: WalletMessageRouter 초기화
-        if (!handlers::wallet::WalletMessageRouter::Instance().Initialize()) {
+        // Step 1: WalletMessageRouter 초기화 체크
+        if (!InitializeRouter()) {
             std::cerr << "[CoordinatorHttpsServer] Failed to initialize WalletMessageRouter" << std::endl;
             return false;
         }
@@ -55,243 +52,198 @@ namespace mpc_engine::coordinator::network::wallet_server
             return false;
         }
 
-        // Step 3: Handler Pool 생성
+        // Step 3: ThreadPool 생성
+        if (!InitializeThreadPool()) {
+            std::cerr << "[CoordinatorHttpsServer] Failed to initialize ThreadPool" << std::endl;
+            return false;
+        }
+
+        // Step 4: Acceptor 생성
         try {
-            handler_pool = std::make_unique<ThreadPool<WalletHandlerContext>>(config.handler_threads);
-            std::cout << "[CoordinatorHttpsServer] Handler pool created with " 
-                      << config.handler_threads << " threads" << std::endl;
+            tcp::endpoint endpoint(
+                asio::ip::make_address(config_.bind_address),
+                config_.bind_port
+            );
+
+            acceptor_ = std::make_unique<tcp::acceptor>(io_context_);
+            acceptor_->open(endpoint.protocol());
+            acceptor_->set_option(asio::socket_base::reuse_address(true));
+            acceptor_->bind(endpoint);
+            acceptor_->listen(asio::socket_base::max_listen_connections);
+
+            std::cout << "[CoordinatorHttpsServer] Listening on " 
+                      << config_.bind_address << ":" << config_.bind_port << std::endl;
         } catch (const std::exception& e) {
-            std::cerr << "[CoordinatorHttpsServer] Failed to create handler pool: " << e.what() << std::endl;
+            std::cerr << "[CoordinatorHttpsServer] Failed to create acceptor: " 
+                      << e.what() << std::endl;
             return false;
         }
 
-        // Step 4: Listen Socket 생성
-        if (!CreateListenSocket()) {
-            std::cerr << "[CoordinatorHttpsServer] Failed to create listen socket" << std::endl;
-            return false;
-        }
-
-        initialized.store(true);
-        std::cout << "[CoordinatorHttpsServer] Initialized successfully" << std::endl;
+        initialized_ = true;
+        std::cout << "[CoordinatorHttpsServer] Initialization complete" << std::endl;
         return true;
     }
 
     bool CoordinatorHttpsServer::Start() 
     {
-        if (!initialized.load()) {
+        if (!initialized_.load()) {
             std::cerr << "[CoordinatorHttpsServer] Not initialized" << std::endl;
             return false;
         }
 
-        if (running.exchange(true)) {
+        if (running_.exchange(true)) {
             std::cout << "[CoordinatorHttpsServer] Already running" << std::endl;
             return true;
         }
 
         std::cout << "[CoordinatorHttpsServer] Starting..." << std::endl;
 
-        // Accept Thread 시작
-        accept_thread = std::thread(&CoordinatorHttpsServer::AcceptLoop, this);
+        // Accept Loop 시작
+        DoAccept();
 
-        // Cleanup Thread 시작
-        cleanup_thread = std::thread(&CoordinatorHttpsServer::CleanupLoop, this);
+        // io_context 스레드 수 결정
+        size_t num_io_threads = config_.io_threads;
+        if (num_io_threads == 0) {
+            num_io_threads = std::thread::hardware_concurrency();
+            if (num_io_threads == 0) {
+                num_io_threads = 4;  // fallback
+            }
+        }
 
-        std::cout << "[CoordinatorHttpsServer] Started successfully on " 
-                  << config.bind_address << ":" << config.bind_port << std::endl;
+        std::cout << "[CoordinatorHttpsServer] Starting " << num_io_threads 
+                  << " I/O threads" << std::endl;
+
+        // io_context를 여러 스레드에서 실행
+        io_threads_.reserve(num_io_threads);
+        for (size_t i = 0; i < num_io_threads; ++i) {
+            io_threads_.emplace_back([this, i]() {
+                std::cout << "[CoordinatorHttpsServer] I/O thread " << i << " started" << std::endl;
+                try {
+                    io_context_.run();
+                } catch (const std::exception& e) {
+                    std::cerr << "[CoordinatorHttpsServer] I/O thread " << i 
+                              << " exception: " << e.what() << std::endl;
+                }
+                std::cout << "[CoordinatorHttpsServer] I/O thread " << i << " stopped" << std::endl;
+            });
+        }
+
+        std::cout << "[CoordinatorHttpsServer] Started successfully" << std::endl;
         return true;
     }
 
     void CoordinatorHttpsServer::Stop() 
     {
-        if (!running.exchange(false)) {
+        if (!running_.exchange(false)) {
             return;
         }
-
+    
         std::cout << "[CoordinatorHttpsServer] Stopping..." << std::endl;
-
-        // Listen Socket 종료
-        if (listen_socket != INVALID_SOCKET_VALUE) {
-            ::close(listen_socket);
-            listen_socket = INVALID_SOCKET_VALUE;
-        }
-
-        // Accept Thread 종료
-        if (accept_thread.joinable()) {
-            accept_thread.join();
-        }
-
-        // Cleanup Thread 종료
-        if (cleanup_thread.joinable()) {
-            cleanup_thread.join();
-        }
-
-        // 모든 연결 종료
-        {
-            std::lock_guard<std::mutex> lock(connections_mutex);
-            for (auto& conn : connections) {
-                if (conn) {
-                    conn->Stop();
+    
+        // Acceptor 중지
+        if (acceptor_) {
+            boost::system::error_code ec;
+            
+            if (acceptor_->is_open()) {
+                // NOLINTNEXTLINE(bugprone-unused-return-value)
+                acceptor_->close(ec);
+                if (ec) {
+                    std::cerr << "[CoordinatorHttpsServer] Acceptor close error: " 
+                              << ec.message() << std::endl;
                 }
             }
-            connections.clear();
         }
-
-        // Handler Pool 종료
-        handler_pool.reset();
-
+    
+        // io_context 중지
+        io_context_.stop();
+    
+        // I/O 스레드 종료 대기
+        for (auto& thread : io_threads_) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+        io_threads_.clear();
+    
+        // ThreadPool 종료
+        if (handler_pool_) {
+            handler_pool_->Shutdown();
+        }
+    
         std::cout << "[CoordinatorHttpsServer] Stopped" << std::endl;
     }
 
-    size_t CoordinatorHttpsServer::GetActiveConnectionCount() const 
+    void CoordinatorHttpsServer::DoAccept() 
     {
-        std::lock_guard<std::mutex> lock(connections_mutex);
-        return connections.size();
-    }
+        if (!running_.load()) {
+            return;
+        }
 
-    void CoordinatorHttpsServer::AcceptLoop() 
-    {
-        std::cout << "[CoordinatorHttpsServer] Accept thread started" << std::endl;
+        acceptor_->async_accept(
+            [this](boost::system::error_code ec, tcp::socket socket) {
+                if (!ec) {
+                    std::cout << "[CoordinatorHttpsServer] New connection accepted from "
+                              << socket.remote_endpoint() << std::endl;
 
-        while (running.load()) 
-        {
-            // Accept 대기 (Blocking)
-            struct sockaddr_in client_addr;
-            socklen_t client_len = sizeof(client_addr);
-            
-            socket_t client_socket = ::accept(listen_socket, 
-                                             (struct sockaddr*)&client_addr, 
-                                             &client_len);
-
-            if (client_socket == INVALID_SOCKET_VALUE) {
-                if (running.load()) {
-                    std::cerr << "[CoordinatorHttpsServer] Accept failed" << std::endl;
+                    // 새 HttpsSession 생성 및 시작
+                    auto session = std::make_shared<HttpsSession>(
+                        std::move(socket),
+                        *ssl_context_,
+                        *handler_pool_,
+                        WalletMessageRouter::Instance(),
+                        config_.max_requests_per_connection,
+                        std::chrono::seconds(config_.keep_alive_timeout_sec)
+                    );
+                    session->Start();
+                } else {
+                    std::cerr << "[CoordinatorHttpsServer] Accept error: " 
+                              << ec.message() << std::endl;
                 }
-                break;
-            }
 
-            // 클라이언트 정보
-            char client_ip[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
-            uint16_t client_port = ntohs(client_addr.sin_port);
-
-            std::cout << "[CoordinatorHttpsServer] New connection from " 
-                      << client_ip << ":" << client_port << std::endl;
-
-            // 최대 연결 수 체크
-            {
-                std::lock_guard<std::mutex> lock(connections_mutex);
-                if (connections.size() >= config.max_connections) {
-                    std::cerr << "[CoordinatorHttpsServer] Max connections reached, rejecting" << std::endl;
-                    ::close(client_socket);
-                    continue;
+                // 다음 연결 수락 대기
+                if (running_.load()) {
+                    DoAccept();
                 }
             }
-
-            // TLS 핸드셰이크
-            TlsConnection tls_conn;
-            if (!tls_conn.AcceptServer(*tls_context, client_socket)) {
-                std::cerr << "[CoordinatorHttpsServer] TLS handshake failed" << std::endl;
-                ::close(client_socket);
-                continue;
-            }
-
-            if (!tls_conn.DoHandshake()) {
-                std::cerr << "[CoordinatorHttpsServer] TLS handshake failed" << std::endl;
-                ::close(client_socket);
-                continue;
-            }
-
-            std::cout << "[CoordinatorHttpsServer] TLS handshake completed" << std::endl;
-
-            // WalletConnection 생성
-            try {
-                auto connection = std::make_unique<WalletConnection>(
-                    std::move(tls_conn), 
-                    handler_pool.get()
-                );
-
-                connection->Start();
-
-                std::lock_guard<std::mutex> lock(connections_mutex);
-                connections.push_back(std::move(connection));
-
-                std::cout << "[CoordinatorHttpsServer] Connection established (total: " 
-                          << connections.size() << ")" << std::endl;
-
-            } catch (const std::exception& e) {
-                std::cerr << "[CoordinatorHttpsServer] Failed to create connection: " 
-                          << e.what() << std::endl;
-                ::close(client_socket);
-            }
-        }
-
-        std::cout << "[CoordinatorHttpsServer] Accept thread stopped" << std::endl;
-    }
-
-    void CoordinatorHttpsServer::CleanupLoop() 
-    {
-        std::cout << "[CoordinatorHttpsServer] Cleanup thread started" << std::endl;
-
-        while (running.load()) 
-        {
-            std::this_thread::sleep_for(std::chrono::seconds(30));
-
-            if (!running.load()) {
-                break;
-            }
-
-            RemoveInactiveConnections();
-        }
-
-        std::cout << "[CoordinatorHttpsServer] Cleanup thread stopped" << std::endl;
-    }
-
-    void CoordinatorHttpsServer::RemoveInactiveConnections() 
-    {
-        std::lock_guard<std::mutex> lock(connections_mutex);
-
-        auto it = connections.begin();
-        while (it != connections.end()) 
-        {
-            bool should_remove = false;
-
-            if (!(*it)->IsActive()) {
-                should_remove = true;
-                std::cout << "[CoordinatorHttpsServer] Removing inactive connection" << std::endl;
-            }
-            else if ((*it)->GetIdleTime() > config.idle_timeout_ms) {
-                should_remove = true;
-                std::cout << "[CoordinatorHttpsServer] Removing idle connection (timeout)" << std::endl;
-                (*it)->Stop();
-            }
-
-            if (should_remove) {
-                it = connections.erase(it);
-            } else {
-                ++it;
-            }
-        }
+        );
     }
 
     bool CoordinatorHttpsServer::InitializeTlsContext() 
     {
         std::cout << "[CoordinatorHttpsServer] Initializing TLS context..." << std::endl;
 
-        tls_context = std::make_unique<TlsContext>();
-
-        TlsConfig tls_config = TlsConfig::CreateSecureServerConfig();
-        if (!tls_context->Initialize(tls_config)) {
-            std::cerr << "[CoordinatorHttpsServer] Failed to initialize TLS context" << std::endl;
-            return false;
-        }
-
-        auto& kms = KMSManager::Instance();
-        auto& res_loader = ReadOnlyResLoaderManager::Instance();
-
         try {
-            // 1. CA 인증서 로드 (클라이언트 인증서 검증용)
+            ssl_context_ = std::make_unique<ssl::context>(ssl::context::tlsv12_server);
+
+            // TLS 옵션 설정 (기존 TlsConfig::CreateSecureServerConfig()와 유사)
+            ssl_context_->set_options(
+                ssl::context::default_workarounds |
+                ssl::context::no_sslv2 |
+                ssl::context::no_sslv3 |
+                ssl::context::no_tlsv1 |
+                ssl::context::no_tlsv1_1 |
+                ssl::context::single_dh_use
+            );
+
+            // SSL/TLS 검증 모드 설정
+            ssl_context_->set_verify_mode(
+                ssl::verify_peer | 
+                ssl::verify_fail_if_no_peer_cert |
+                ssl::verify_client_once
+            );
+
+            auto& kms = KMSManager::Instance();
+            auto& res_loader = ReadOnlyResLoaderManager::Instance();
+
+            // 환경 변수에서 경로 읽기
             std::string tls_cert_path = env::EnvManager::Instance().GetString("TLS_CERT_PATH");
             std::string tls_ca = env::EnvManager::Instance().GetString("TLS_CERT_CA");
+            std::string coordinator_cert = env::EnvManager::Instance().GetString("TLS_CERT_COORDINATOR_WALLET");
+            std::string coordinator_key_id = env::EnvManager::Instance().GetString("TLS_KMS_COORDINATOR_WALLET_KEY_ID");
+
+            // 1. CA 인증서 로드 (클라이언트 인증서 검증용 - mTLS)
+            std::cout << "[CoordinatorHttpsServer] Loading CA certificate: " 
+                      << tls_cert_path + tls_ca << std::endl;
 
             std::string ca_pem = res_loader.ReadFile(tls_cert_path + tls_ca);
             if (ca_pem.empty()) {
@@ -299,143 +251,82 @@ namespace mpc_engine::coordinator::network::wallet_server
                 return false;
             }
 
-            if (!tls_context->LoadCA(ca_pem)) {
-                std::cerr << "[CoordinatorHttpsServer] Failed to load CA certificate to context" << std::endl;
-                return false;
-            }
+            ssl_context_->load_verify_file(tls_cert_path + tls_ca);
 
             // 2. 서버 인증서 로드
-            std::string certificate_pem = res_loader.ReadFile(tls_cert_path + config.tls_cert_path);
-            std::string private_key_pem = kms.GetSecret(config.tls_key_id);
+            std::cout << "[CoordinatorHttpsServer] Loading server certificate: " 
+                      << tls_cert_path + coordinator_cert << std::endl;
 
-            if (certificate_pem.empty() || private_key_pem.empty()) {
-                std::cerr << "[CoordinatorHttpsServer] Failed to load certificate or private key" << std::endl;
+            std::string certificate_pem = res_loader.ReadFile(tls_cert_path + coordinator_cert);
+            if (certificate_pem.empty()) {
+                std::cerr << "[CoordinatorHttpsServer] Failed to load server certificate" << std::endl;
                 return false;
             }
 
-            CertificateData cert_data;
-            cert_data.certificate_pem = certificate_pem;
-            cert_data.private_key_pem = private_key_pem;
+            // 인증서 체인 로드
+            ssl_context_->use_certificate_chain_file(tls_cert_path + coordinator_cert);
 
-            if (!tls_context->LoadCertificate(cert_data)) {
-                std::cerr << "[CoordinatorHttpsServer] Failed to load certificate into TLS context" << std::endl;
+            // 3. 개인키 로드 (KMS에서)
+            std::cout << "[CoordinatorHttpsServer] Loading private key from KMS: " 
+                      << coordinator_key_id << std::endl;
+
+            std::string private_key_pem = kms.GetSecret(coordinator_key_id);
+            if (private_key_pem.empty()) {
+                std::cerr << "[CoordinatorHttpsServer] Failed to load private key from KMS: " 
+                          << coordinator_key_id << std::endl;
                 return false;
             }
 
-            std::cout << "[CoordinatorHttpsServer] TLS context initialized successfully" << std::endl;
+            // 개인키를 메모리에서 로드
+            boost::asio::const_buffer key_buffer(private_key_pem.data(), private_key_pem.size());
+            ssl_context_->use_private_key(key_buffer, ssl::context::pem);
+
+            // 4. 암호 스위트 설정 (강력한 암호만 허용)
+            SSL_CTX_set_cipher_list(ssl_context_->native_handle(), 
+                "ECDHE-ECDSA-AES256-GCM-SHA384:"
+                "ECDHE-RSA-AES256-GCM-SHA384:"
+                "ECDHE-ECDSA-AES128-GCM-SHA256:"
+                "ECDHE-RSA-AES128-GCM-SHA256");
+
+            std::cout << "[CoordinatorHttpsServer] TLS context initialized successfully with mTLS" << std::endl;
             return true;
 
         } catch (const std::exception& e) {
-            std::cerr << "[CoordinatorHttpsServer] TLS initialization exception: " 
+            std::cerr << "[CoordinatorHttpsServer] TLS context initialization failed: " 
                       << e.what() << std::endl;
             return false;
         }
     }
 
-    bool CoordinatorHttpsServer::CreateListenSocket() 
+    bool CoordinatorHttpsServer::InitializeThreadPool() 
     {
-        std::cout << "[CoordinatorHttpsServer] Creating listen socket..." << std::endl;
-    
-        // Socket 생성
-        listen_socket = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (listen_socket == INVALID_SOCKET_VALUE) {
-            std::cerr << "[CoordinatorHttpsServer] Failed to create socket: " 
-                      << strerror(errno) << " (errno: " << errno << ")" << std::endl;
+        std::cout << "[CoordinatorHttpsServer] Creating ThreadPool with " 
+                  << config_.handler_threads << " threads" << std::endl;
+
+        try {
+            handler_pool_ = std::make_unique<ThreadPool<WalletHandlerContext>>(
+                config_.handler_threads
+            );
+            std::cout << "[CoordinatorHttpsServer] ThreadPool created successfully" << std::endl;
+            return true;
+        } catch (const std::exception& e) {
+            std::cerr << "[CoordinatorHttpsServer] Failed to create ThreadPool: " 
+                      << e.what() << std::endl;
             return false;
         }
-    
-        std::cout << "[CoordinatorHttpsServer] Socket created: " << listen_socket << std::endl;
-    
-        // SO_REUSEADDR 설정
-        int opt = 1;
-        if (::setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-            std::cerr << "[CoordinatorHttpsServer] Failed to set SO_REUSEADDR: " 
-                      << strerror(errno) << " (errno: " << errno << ")" << std::endl;
-            ::close(listen_socket);
-            listen_socket = INVALID_SOCKET_VALUE;
+    }
+
+    bool CoordinatorHttpsServer::InitializeRouter() 
+    {
+        std::cout << "[CoordinatorHttpsServer] Initializing WalletMessageRouter..." << std::endl;
+
+        if (!WalletMessageRouter::Instance().Initialize()) {
+            std::cerr << "[CoordinatorHttpsServer] Failed to initialize WalletMessageRouter" 
+                      << std::endl;
             return false;
         }
-    
-        std::cout << "[CoordinatorHttpsServer] SO_REUSEADDR set" << std::endl;
-    
-        // SO_REUSEPORT 설정
-        opt = 1;
-        if (::setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
-            std::cerr << "[CoordinatorHttpsServer] Warning: Failed to set SO_REUSEPORT: " 
-                      << strerror(errno) << " (errno: " << errno << ")" << std::endl;
-        } else {
-            std::cout << "[CoordinatorHttpsServer] SO_REUSEPORT set" << std::endl;
-        }
-    
-        // SO_LINGER 설정 (연결 종료 시 즉시 포트 해제)
-        struct linger sl;
-        sl.l_onoff = 1;   // linger 활성화
-        sl.l_linger = 0;  // 즉시 종료
-        if (::setsockopt(listen_socket, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl)) < 0) {
-            std::cerr << "[CoordinatorHttpsServer] Warning: Failed to set SO_LINGER: " 
-                      << strerror(errno) << std::endl;
-        } else {
-            std::cout << "[CoordinatorHttpsServer] SO_LINGER set (immediate close)" << std::endl;
-        }
-    
-        // Bind
-        struct sockaddr_in server_addr;
-        std::memset(&server_addr, 0, sizeof(server_addr));
-        server_addr.sin_family = AF_INET;
-        server_addr.sin_port = htons(config.bind_port);
-    
-        std::cout << "[CoordinatorHttpsServer] Preparing to bind to " 
-                  << config.bind_address << ":" << config.bind_port << std::endl;
-    
-        if (config.bind_address == "0.0.0.0") {
-            server_addr.sin_addr.s_addr = INADDR_ANY;
-            std::cout << "[CoordinatorHttpsServer] Using INADDR_ANY" << std::endl;
-        } else {
-            if (inet_pton(AF_INET, config.bind_address.c_str(), &server_addr.sin_addr) <= 0) {
-                std::cerr << "[CoordinatorHttpsServer] Invalid bind address: " 
-                          << config.bind_address << std::endl;
-                ::close(listen_socket);
-                listen_socket = INVALID_SOCKET_VALUE;
-                return false;
-            }
-            std::cout << "[CoordinatorHttpsServer] Address converted successfully" << std::endl;
-        }
-    
-        if (::bind(listen_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-            int bind_errno = errno;
-            std::cerr << "[CoordinatorHttpsServer] Failed to bind to " 
-                      << config.bind_address << ":" << config.bind_port 
-                      << " - Error: " << strerror(bind_errno) 
-                      << " (errno: " << bind_errno << ")" << std::endl;
-            
-            if (bind_errno == EADDRINUSE) {
-                std::cerr << "[CoordinatorHttpsServer] Port " << config.bind_port 
-                          << " is already in use" << std::endl;
-            } else if (bind_errno == EACCES) {
-                std::cerr << "[CoordinatorHttpsServer] Permission denied for port " 
-                          << config.bind_port << std::endl;
-            } else if (bind_errno == EADDRNOTAVAIL) {
-                std::cerr << "[CoordinatorHttpsServer] Address not available" << std::endl;
-            }
-            
-            ::close(listen_socket);
-            listen_socket = INVALID_SOCKET_VALUE;
-            return false;
-        }
-    
-        std::cout << "[CoordinatorHttpsServer] Bind successful" << std::endl;
-    
-        // Listen
-        if (::listen(listen_socket, 128) < 0) {
-            std::cerr << "[CoordinatorHttpsServer] Failed to listen: " 
-                      << strerror(errno) << " (errno: " << errno << ")" << std::endl;
-            ::close(listen_socket);
-            listen_socket = INVALID_SOCKET_VALUE;
-            return false;
-        }
-    
-        std::cout << "[CoordinatorHttpsServer] Listen socket created successfully on " 
-                  << config.bind_address << ":" << config.bind_port << std::endl;
+
+        std::cout << "[CoordinatorHttpsServer] WalletMessageRouter initialized" << std::endl;
         return true;
     }
 

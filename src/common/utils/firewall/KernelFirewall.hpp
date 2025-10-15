@@ -1,7 +1,6 @@
 // src/common/utils/firewall/KernelFirewall.hpp
 #pragma once
 #include <string>
-#include <vector>
 #include <cstdint>
 
 namespace mpc_engine::utils
