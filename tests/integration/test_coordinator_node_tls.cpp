@@ -1,7 +1,7 @@
 // tests/integration/test_coordinator_node_tls.cpp
 #include "coordinator/CoordinatorServer.hpp"
 #include "node/NodeServer.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "types/BasicTypes.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"

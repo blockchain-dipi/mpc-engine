@@ -1,6 +1,6 @@
 // src/node/NodeServer.cpp
 #include "node/NodeServer.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "node/handlers/include/NodeMessageRouter.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include <iostream>

@@ -1,7 +1,7 @@
 // src/node/main.cpp
 #include "NodeServer.hpp"
 #include "types/BasicTypes.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"

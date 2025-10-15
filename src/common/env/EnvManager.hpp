@@ -1,4 +1,4 @@
-// src/common/config/EnvManager.hpp
+// src/common/env/EnvManager.hpp
 #pragma once
 #include "EnvConfig.hpp"
 #include <memory>

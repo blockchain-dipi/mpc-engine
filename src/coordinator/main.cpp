@@ -1,7 +1,7 @@
 // src/coordinator/main.cpp
 #include "CoordinatorServer.hpp"
 #include "types/BasicTypes.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "common/kms/include/KMSException.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"

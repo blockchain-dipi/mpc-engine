@@ -2,7 +2,7 @@
 #include "coordinator/CoordinatorServer.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/kms/include/KMSManager.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include <fstream>
 #include <algorithm>

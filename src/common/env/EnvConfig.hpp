@@ -1,4 +1,4 @@
-// src/common/config/EnvConfig.hpp
+// src/common/env/EnvConfig.hpp
 #pragma once
 #include <string>
 #include <unordered_map>

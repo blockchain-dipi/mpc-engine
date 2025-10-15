@@ -2,7 +2,7 @@
 #include "coordinator/network/wallet_server/include/CoordinatorHttpsServer.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "coordinator/handlers/wallet/include/WalletMessageRouter.hpp"
 #include <iostream>
 #include <thread>

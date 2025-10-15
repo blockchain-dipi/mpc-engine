@@ -1,6 +1,6 @@
 // src/node/network/src/NodeTcpServer.cpp
 #include "node/network/include/NodeTcpServer.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/utils/firewall/KernelFirewall.hpp"
 #include "common/utils/threading/ThreadUtils.hpp"

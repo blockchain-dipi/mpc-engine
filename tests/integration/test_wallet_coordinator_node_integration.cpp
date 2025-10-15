@@ -1,7 +1,7 @@
 // tests/integration/test_wallet_coordinator_node_integration.cpp
 #include "coordinator/CoordinatorServer.hpp"
 #include "node/NodeServer.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "common/kms/include/KMSManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include "common/network/tls/include/TlsContext.hpp"

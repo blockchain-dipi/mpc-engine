@@ -2,7 +2,7 @@
 #include "common/utils/socket/SocketUtils.hpp"
 #include "common/utils/threading/ThreadUtils.hpp"
 #include "common/kms/include/KMSManager.hpp"
-#include "common/config/EnvManager.hpp"
+#include "common/env/EnvManager.hpp"
 #include "common/resource/include/ReadOnlyResLoaderManager.hpp"
 #include <sys/socket.h>
 #include <arpa/inet.h>

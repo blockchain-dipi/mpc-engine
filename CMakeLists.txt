@@ -60,8 +60,8 @@ target_link_libraries(proto_wallet_coordinator
 add_library(mpc_common STATIC
     src/common/utils/socket/SocketUtils.cpp
     src/common/utils/firewall/KernelFirewall.cpp
-    src/common/config/EnvConfig.cpp
-    src/common/config/EnvManager.cpp
+    src/common/env/EnvConfig.cpp
+    src/common/env/EnvManager.cpp
     src/common/network/tls/src/TlsContext.cpp
     src/common/network/tls/src/TlsConnection.cpp
 )
