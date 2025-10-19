@@ -188,6 +188,9 @@ target_link_libraries(coordinator_wallet_server
     OpenSSL::Crypto
 )
 
+# === MPC-SDK 서브프로젝트 추가 ===
+add_subdirectory(mpc-sdk)
+
 # === Node 서버 라이브러리 ===
 add_library(node_server STATIC
     src/node/NodeServer.cpp
@@ -201,6 +204,7 @@ target_link_libraries(node_server
     mpc_common
     mpc_kms
     mpc_resource
+    # mpc-sdk                    # ← 나중에 여기 추가될 예정
     Threads::Threads
 )
 
