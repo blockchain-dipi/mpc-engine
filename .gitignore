@@ -1,5 +1,17 @@
-# Build artifacts
+# ==========================================
+# MPC-Engine Git Ignore
+# ==========================================
+
+# ========== Cache (최우선!) ==========
+.cache/
+**/.cache/
+.clangd/
+**/.clangd/
+*.cache
+
+# ========== Build ==========
 build/
+**/build/
 *.o
 *.a
 *.so
@@ -7,8 +19,9 @@ build/
 *.dylib
 *.exe
 *.out
+*.d
 
-# CMake
+# ========== CMake ==========
 CMakeCache.txt
 CMakeFiles/
 CMakeScripts/
@@ -18,63 +31,69 @@ compile_commands.json
 CTestTestfile.cmake
 _deps/
 
-# IDE & Editors
+# ========== IDE ==========
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+*.code-workspace
 
-# Logs
+# ========== Clang Tools ==========
+.clang-format
+.clang-tidy
+
+# ========== Logs ==========
 *.log
 logs/
 *.log.*
 
-# Certificates and Keys - 환경별 관리
-# 모든 인증서 폴더는 Git 포함 (공개키라서 안전)
-# 개인키는 .kms/ 폴더와 certs/ca/local/에만 존재
+# ========== Security ==========
 certs/generated/
-
-# 기타 보안 파일들
 *.p12
 *.pfx
-
-# Environment files with secrets
+*.pem
+*.key
+!certs/**/*.crt
+!certs/**/*.pub
 .env.production
 .env.*.local
 *.secret
 
-# Core dumps
+# ========== System ==========
 core
 core.*
-
-# Backup files
 *.bak
 *.backup
-*~
-
-# Temporary files
 tmp/
 temp/
 *.tmp
-
-# OS specific
 Thumbs.db
-.DS_Store
 desktop.ini
 
-# Dependencies (if using package managers)
+# ========== Dependencies ==========
 node_modules/
 vendor/
 
-# Test artifacts
+# ========== Test ==========
 test_results/
 coverage/
 
-# Documentation builds
+# ========== Docs ==========
 docs/_build/
 
-# Go 테스트용 생성 파일
+# ========== Go ==========
 tests/load/proto/
 tests/load/*.pb.go
+
+# ========== Submodules ==========
+external/*/build/
+external/*/.cache/
+external/**/*.o
+external/**/*.a
+
+# ========== mpc-sdk ==========
+mpc-sdk/build/
+mpc-sdk/*.a
+mpc-sdk/*.so

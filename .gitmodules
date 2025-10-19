@@ -1,0 +1,3 @@
+[submodule "external/fireblocks-mpc-lib"]
+	path = external/fireblocks-mpc-lib
+	url = https://github.com/fireblocks/mpc-lib.git
