@@ -204,7 +204,8 @@ target_link_libraries(node_server
     mpc_common
     mpc_kms
     mpc_resource
-    # mpc-sdk                    # ← 나중에 여기 추가될 예정
+    mpc-sdk                    # ✅ 이제 링크 가능
+    mpc-sdk-fireblocks         # ✅ fireblocks provider도 링크
     Threads::Threads
 )
 

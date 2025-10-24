@@ -13,7 +13,16 @@ namespace mpc::providers::fireblocks {
 
     class FireblocksCryptoProvider : public mpc::crypto::ICryptoProvider {
     public:
-        FireblocksCryptoProvider();
+        /**
+         * @brief 생성자
+         * @param player_id 플레이어 ID
+         * @param tenant_id Tenant ID
+         */
+        explicit FireblocksCryptoProvider(
+            uint64_t player_id,
+            const std::string& tenant_id
+        );
+        
         ~FireblocksCryptoProvider() override;
 
         mpc::crypto::IKeyGenerator* GetKeyGenerator() override;

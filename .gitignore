@@ -9,9 +9,8 @@
 **/.clangd/
 *.cache
 
-# ========== Build ==========
-build/
-**/build/
+# ========== Build (루트 빌드만) ==========
+/build/
 *.o
 *.a
 *.so
@@ -87,13 +86,8 @@ docs/_build/
 tests/load/proto/
 tests/load/*.pb.go
 
-# ========== Submodules ==========
+# ========== Submodules (External) ==========
 external/*/build/
 external/*/.cache/
 external/**/*.o
 external/**/*.a
-
-# ========== mpc-sdk ==========
-mpc-sdk/build/
-mpc-sdk/*.a
-mpc-sdk/*.so
